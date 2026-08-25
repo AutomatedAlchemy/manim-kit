@@ -506,7 +506,7 @@ def _tool_installer():
 def cmd_install(_args: argparse.Namespace) -> int:
     _tool_installer().install()
     _install_skill()
-    if not _venv_ready():
+    if _manim_version() is None:
         print("Run: manim-kit setup")
     return 0
 
