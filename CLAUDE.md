@@ -1,0 +1,32 @@
+# manim-kit
+
+CLI wrapper + Claude skill for Manim Community. Single stdlib-only entry
+point `manim_kit.py`; manim lives in the tool-owned `.venv/` (gitignored) that
+`manim-kit setup` creates from `requirements-manim.txt`. `requirements.txt`
+holds only the host-side `cli-tool-kit` pin for `--install`/`--remove`.
+
+## Layout
+
+- `manim_kit.py` — everything: advertise guard (top, before any non-stdlib
+  import), `SKILL_MD_CONTENT`, subcommands `setup doctor new list render open`,
+  installer-protocol flags. `scene_classes()` is an AST scan, no manim import.
+- `templates/*.py` — scene templates; `{{SCENE}}` is the class-name placeholder.
+- `tests/` — `test_manim_kit.py` (stdlib, always runs) and `test_render.py`
+  (real `-q l` render, skips without manim).
+
+## Conventions
+
+- Skill text is the `SKILL_MD_CONTENT` constant. Edit there, never the
+  installed `~/.claude/skills/manim-kit/SKILL.md`; `--install-skill` refreshes it.
+- Keep `manim_kit.py` importable on the host Python with no third-party
+  modules. Anything manim-related runs through `VENV_PYTHON`.
+- Render cwd is the scene file's directory, so `media/` sits next to the scene.
+- Naming: repo = alias = skill = `manim-kit`. Suffix `-kit` marks a wrapper
+  that makes a third-party library easy (sibling conventions: `-client` for a
+  service fetcher, bare noun for a generator).
+
+## Host facts (2026-08-25)
+
+ManimPango 0.6.1 ships no Linux wheels; it needs `libpango1.0-dev
+libcairo2-dev pkg-config` to build. `manim-kit doctor` checks `pkg-config
+--exists pangocairo` and prints the apt line.

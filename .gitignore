@@ -1,0 +1,13 @@
+# Tool-owned manim venv (created by `manim-kit setup`)
+.venv/
+
+# Manim render output (lives next to scene files, never in the repo)
+media/
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Claude Code session-local state
+.claude/

@@ -1,0 +1,3 @@
+# Installed into the tool-owned .venv by `manim-kit setup`.
+# ManimPango has no Linux wheels: needs libpango1.0-dev libcairo2-dev pkg-config.
+manim>=0.19,<1.0
