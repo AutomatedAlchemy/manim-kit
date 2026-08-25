@@ -47,13 +47,14 @@ explainer clip, an animated plot, or asks to "manim" something. It wraps
 | Check the install | `manim-kit doctor` |
 | New scene file from a template | `manim-kit new NAME [--template basic\\|text\\|graph\\|threed] [--dir DIR]` |
 | List the Scene classes in a file | `manim-kit list FILE.py` |
-| Draft render (480p15, fast) | `manim-kit render FILE.py [SceneName] -q l` |
-| Final render (1080p60) | `manim-kit render FILE.py SceneName -q h` |
+| Render (1080p60, the default) | `manim-kit render FILE.py [SceneName]` |
+| Draft render (480p15, seconds) | `manim-kit render FILE.py SceneName -q l` |
 | Render every scene in the file | `manim-kit render FILE.py --all` |
 | GIF / PNG last frame / transparent | `--format gif` · `--last-frame` · `--transparent` |
 | Open the newest render of a file | `manim-kit open FILE.py` |
 
-Quality presets: `l` 480p15 · `m` 720p30 · `h` 1080p60 · `p` 1440p60 · `k` 2160p60.
+Quality presets: `l` 480p15 · `m` 720p30 · `h` 1080p60 (default) · `p` 1440p60 · `k` 2160p60.
+The default is `h`: a 480p clip looks pixelated the moment it is shown at any real size, so only go below `h` for drafts.
 Output lands next to the scene file: `media/videos/<file-stem>/<res>/<Scene>.mp4`
 (`media/images/<file-stem>/…png` for last-frame renders). `render` prints the
 produced paths on success. Anything after `--` is passed straight to `manim render`.
@@ -63,9 +64,9 @@ produced paths on success. Anything after `--` is passed straight to `manim rend
 1. `manim-kit doctor` once per host. If it reports missing system libraries,
    show the user the exact `apt` line it prints — you cannot sudo for them.
 2. `manim-kit new my_scene --template graph` → edit `my_scene.py`.
-3. Iterate with `-q l` (seconds per render). Read the traceback if it fails;
+3. Iterate with `-q l` while the timing and layout are in flux (seconds per render). Read the traceback if it fails;
    the usual causes are listed under *Gotchas*.
-4. Ship with `-q h` (or `-q m` when file size matters), then `manim-kit open`.
+4. Ship with the default quality (`-q h`, 1080p60) - never a `-q l` draft - then `manim-kit open`.
 
 Keep one idea per Scene class and one file per topic; several short scenes
 beat one long one — they render and debug independently.
@@ -555,8 +556,8 @@ def build_parser() -> argparse.ArgumentParser:
     s = sub.add_parser("render", help="render one or more scenes")
     s.add_argument("file")
     s.add_argument("scenes", nargs="*", help="Scene class names (default: the only scene in the file)")
-    s.add_argument("-q", "--quality", choices=sorted(QUALITY), default="l",
-                   help="l=480p15 m=720p30 h=1080p60 p=1440p60 k=2160p60 (default: l)")
+    s.add_argument("-q", "--quality", choices=sorted(QUALITY), default="h",
+                   help="l=480p15 m=720p30 h=1080p60 p=1440p60 k=2160p60 (default: h)")
     s.add_argument("-a", "--all", action="store_true", help="render every scene in the file")
     s.add_argument("-p", "--preview", action="store_true", help="open the result when done")
     s.add_argument("-s", "--last-frame", action="store_true", help="save only the last frame as PNG")

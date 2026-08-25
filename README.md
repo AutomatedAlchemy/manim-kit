@@ -36,6 +36,7 @@ next to the script; the host Python never sees it.
 ```bash
 manim-kit new pythagoras --template graph     # → pythagoras.py, class Pythagoras
 manim-kit list pythagoras.py                  # scene classes in the file
+manim-kit render pythagoras.py                # 1080p60 by default
 manim-kit render pythagoras.py -q l           # draft, 480p15, seconds
 manim-kit render pythagoras.py Pythagoras -q h --preview   # final 1080p60, auto-open
 manim-kit render pythagoras.py --all --format gif
@@ -55,7 +56,7 @@ file; `render` prints the paths it produced.
 
 `--install` (or `--install-skill` alone) writes `~/.claude/skills/manim-kit/SKILL.md`
 from the `SKILL_MD_CONTENT` constant in `manim_kit.py`. The skill carries the
-commands above, a workflow (draft with `-q l`, ship with `-q h`), a Manim CE
+commands above, a workflow (draft with `-q l`, ship at the default `-q h`), a Manim CE
 cheat sheet (mobjects, animations, positioning, updaters, plots, text, 3D) and
 the usual gotchas (ManimGL names that don't exist in Manim CE, `Transform` vs
 `ReplacementTransform`, raw strings for TeX). The `--advertise` probe reports
