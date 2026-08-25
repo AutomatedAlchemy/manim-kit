@@ -496,7 +496,11 @@ def _tool_installer():
     except ImportError:
         _fail("cli-tool-kit is not importable by this interpreter.\n"
               "Run: pip install -r requirements.txt   (or use the AutomatedAlchemy installer GUI)")
-    return ToolInstaller(script_path=os.path.abspath(__file__), metadata=ToolMetadata(**METADATA))
+    import dataclasses
+    # skill_name is advertise-only; keep whatever fields this cli-tool-kit version knows.
+    known = {f.name for f in dataclasses.fields(ToolMetadata)}
+    meta = ToolMetadata(**{k: v for k, v in METADATA.items() if k in known})
+    return ToolInstaller(script_path=os.path.abspath(__file__), metadata=meta)
 
 
 def cmd_install(_args: argparse.Namespace) -> int:
