@@ -22,6 +22,12 @@ VENV_PYTHON = os.path.join(VENV_DIR, "bin", "python")
 TEMPLATE_DIR = os.path.join(SCRIPT_DIR, "templates")
 MANIM_REQUIREMENTS = os.path.join(SCRIPT_DIR, "requirements-manim.txt")
 
+MUSIC_JSON = os.path.join(SCRIPT_DIR, "music.json")
+MUSIC_DIR = os.path.join(os.path.expanduser("~"), ".cache", "manim-kit", "music")
+MUSIC_GAIN = 0.12   # ~ -18 dB: a bed a later voice-over still sits on top of
+MUSIC_FADE = 2.0    # seconds of fade in and out
+RUBINETTI_FORM = "https://vincerubinetti.github.io/using-the-music-of-3blue1brown/"
+
 SKILL_NAME = "manim-kit"
 SKILL_DIR = os.path.join(os.path.expanduser("~"), ".claude", "skills", SKILL_NAME)
 SKILL_FILE = os.path.join(SKILL_DIR, "SKILL.md")
@@ -51,6 +57,8 @@ explainer clip, an animated plot, or asks to "manim" something. It wraps
 | Draft render (480p15, seconds) | `manim-kit render FILE.py SceneName -q l` |
 | Render every scene in the file | `manim-kit render FILE.py --all` |
 | GIF / PNG last frame / transparent | `--format gif` · `--last-frame` · `--transparent` |
+| Render with a music bed under it | `manim-kit render FILE.py --music` |
+| Music library | `manim-kit music list\\|fetch\\|add FILE\\|credits` |
 | Open the newest render of a file | `manim-kit open FILE.py` |
 
 Quality presets: `l` 480p15 · `m` 720p30 · `h` 1080p60 (default) · `p` 1440p60 · `k` 2160p60.
@@ -70,6 +78,23 @@ produced paths on success. Anything after `--` is passed straight to `manim rend
 
 Keep one idea per Scene class and one file per topic; several short scenes
 beat one long one — they render and debug independently.
+
+## Music
+
+`--music` mixes an ambient track under the finished MP4 with ffmpeg: looped or trimmed to
+the exact video length, faded in and out, at `volume=0.12` so a later voice-over sits on
+top (`--music-gain` to change it). The video is not re-encoded, so it costs a second.
+First use downloads the track into `~/.cache/manim-kit/music/`; `manim-kit music fetch`
+does it ahead of time. `--track ID` picks another one, `manim-kit music add FILE` takes
+the user's own audio.
+
+The bundled tracks are Chris Zabriskie, CC BY. **After a `--music` render the command
+prints a credit line — tell the user it has to go into the video description.** The actual
+3Blue1Brown music (Vincent Rubinetti) is all rights reserved and licensed per project via
+`https://vincerubinetti.github.io/using-the-music-of-3blue1brown/`; do not download or
+suggest ripping it, point at that form instead.
+
+`--music` is ignored for `--last-frame`, `--format png` and `--format gif` — no audio track.
 
 ## Manim CE cheat sheet (v0.19+)
 
@@ -169,11 +194,13 @@ if "--advertise" in sys.argv:
 
 import argparse
 import ast
+import hashlib
 import re
 import shutil
 import subprocess
 import time
-from typing import Iterable, List, Optional
+import urllib.request
+from typing import Dict, Iterable, List, Optional
 
 QUALITY = {
     "l": "480p15",
@@ -308,6 +335,169 @@ def _xdg_open(path: str) -> None:
     subprocess.Popen([opener, path], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
+# --- music -------------------------------------------------------------------------
+
+AUDIO_EXTS = (".mp3", ".m4a", ".wav", ".ogg", ".flac")
+
+
+def music_manifest() -> List[Dict[str, object]]:
+    """The committed track list from music.json (empty list if it is missing)."""
+    if not os.path.isfile(MUSIC_JSON):
+        return []
+    with open(MUSIC_JSON, encoding="utf-8") as f:
+        return json.load(f).get("tracks", [])
+
+
+def _manifest_entry(track_id: str) -> Optional[Dict[str, object]]:
+    for entry in music_manifest():
+        if entry["id"] == track_id:
+            return entry
+    return None
+
+
+def _track_path(entry: Dict[str, object]) -> str:
+    ext = os.path.splitext(str(entry["url"]).split("?")[0])[1] or ".mp3"
+    return os.path.join(MUSIC_DIR, f"{entry['id']}{ext}")
+
+
+def _sha256(path: str) -> str:
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1 << 20), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def _is_cached(entry: Dict[str, object]) -> bool:
+    path = _track_path(entry)
+    return os.path.isfile(path) and _sha256(path) == entry["sha256"]
+
+
+def fetch_track(entry: Dict[str, object], force: bool = False) -> str:
+    """Download *entry* into MUSIC_DIR unless it is already there and intact.
+
+    Downloads to ``<name>.part`` and only renames once the digest matches, so an
+    interrupted fetch can never leave a truncated file that later passes as cached.
+    """
+    path = _track_path(entry)
+    if not force and _is_cached(entry):
+        return path
+    os.makedirs(MUSIC_DIR, exist_ok=True)
+    part = path + ".part"
+    _info(f"fetching {entry['id']} ({entry['title']})")
+    # The URL is percent-encoded as archive.org serves it; re-encoding breaks the
+    # redirect to the dnNNNNNN node for names with commas or apostrophes.
+    req = urllib.request.Request(str(entry["url"]), headers={"User-Agent": f"manim-kit/{__version__}"})
+    try:
+        with urllib.request.urlopen(req, timeout=60) as resp, open(part, "wb") as out:
+            shutil.copyfileobj(resp, out)
+    except Exception as exc:  # network, HTTP, disk — all end the same way
+        if os.path.exists(part):
+            os.remove(part)
+        raise RuntimeError(f"could not download {entry['id']}: {exc}") from exc
+    got = _sha256(part)
+    if got != entry["sha256"]:
+        os.remove(part)
+        raise RuntimeError(f"checksum mismatch for {entry['id']}: got {got}, expected {entry['sha256']}")
+    os.replace(part, path)
+    return path
+
+
+def _local_tracks() -> Dict[str, str]:
+    """Audio files sitting in MUSIC_DIR, keyed by filename stem."""
+    if not os.path.isdir(MUSIC_DIR):
+        return {}
+    found = {}
+    for name in sorted(os.listdir(MUSIC_DIR)):
+        if name.lower().endswith(AUDIO_EXTS):
+            found[os.path.splitext(name)[0]] = os.path.join(MUSIC_DIR, name)
+    return found
+
+
+def resolve_track(track_id: Optional[str]) -> tuple:
+    """(path, credit) for *track_id*; fetches it when it is a manifest entry.
+
+    A bare filename stem in MUSIC_DIR wins over nothing; the manifest wins over a
+    stale local file of the same id. With no id, the first manifest entry is used.
+    """
+    if track_id is None:
+        track_id = os.environ.get("MANIM_KIT_TRACK") or None
+    if track_id is None:
+        manifest = music_manifest()
+        if not manifest:
+            raise RuntimeError(f"no tracks in {MUSIC_JSON} and none requested")
+        entry = manifest[0]
+    else:
+        entry = _manifest_entry(track_id)
+        if entry is None:
+            local = _local_tracks().get(track_id)
+            if local is None:
+                known = sorted(set(list(_local_tracks()) + [str(e["id"]) for e in music_manifest()]))
+                raise RuntimeError(f"unknown track {track_id!r}; have: {', '.join(known) or '(none)'}")
+            return local, ""
+    return fetch_track(entry), str(entry["credit"])
+
+
+def _video_duration(path: str) -> Optional[float]:
+    probe = shutil.which("ffprobe")
+    if probe is None:
+        return None
+    out = subprocess.run(
+        [probe, "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", path],
+        capture_output=True, text=True,
+    )
+    try:
+        return float(out.stdout.strip())
+    except ValueError:
+        return None
+
+
+def mux_command(video: str, track: str, out: str, duration: float,
+                gain: float = MUSIC_GAIN, fade: float = MUSIC_FADE) -> List[str]:
+    """The ffmpeg call that lays *track* under *video* at *gain*, faded in and out.
+
+    ``-stream_loop -1`` covers a track shorter than the video, ``-shortest`` trims a
+    longer one, and ``-c:v copy`` means the video is never re-encoded.
+    """
+    filters = []
+    if fade > 0:
+        filters.append(f"afade=t=in:st=0:d={fade:g}")
+        filters.append(f"afade=t=out:st={max(duration - fade, 0):.3f}:d={fade:g}")
+    filters.append(f"volume={gain:g}")
+    return [
+        shutil.which("ffmpeg") or "ffmpeg", "-y", "-loglevel", "error",
+        "-i", video, "-stream_loop", "-1", "-i", track,
+        "-filter:a", ",".join(filters),
+        "-map", "0:v", "-map", "1:a",
+        "-c:v", "copy", "-c:a", "aac", "-b:a", "192k", "-shortest", out,
+    ]
+
+
+def mux_music(video: str, track: str, gain: float = MUSIC_GAIN, fade: float = MUSIC_FADE) -> bool:
+    """Mix *track* under *video* in place. False (with a warning) on any failure.
+
+    A render that produced a good silent file must never fail because of the music.
+    """
+    if shutil.which("ffmpeg") is None:
+        _warn("ffmpeg not found — leaving the render silent")
+        return False
+    duration = _video_duration(video)
+    if duration is None:
+        _warn(f"no duration for {os.path.basename(video)} — leaving it silent")
+        return False
+    tmp = video + ".music.mp4"
+    proc = subprocess.run(mux_command(video, track, tmp, duration, gain, fade),
+                          capture_output=True, text=True)
+    if proc.returncode != 0 or not os.path.isfile(tmp):
+        if os.path.exists(tmp):
+            os.remove(tmp)
+        _warn(f"ffmpeg could not add music ({proc.stderr.strip().splitlines()[-1:] or ['no output']}); "
+              "the silent render is intact")
+        return False
+    os.replace(tmp, video)
+    return True
+
+
 # --- commands ----------------------------------------------------------------------
 
 def cmd_setup(args: argparse.Namespace) -> int:
@@ -360,6 +550,12 @@ def cmd_doctor(args: argparse.Namespace) -> int:
         have = subprocess.run([pkgconfig, "--exists", "pangocairo"], capture_output=True).returncode == 0
         if not have:
             _warn(f"pangocairo headers missing (ManimPango builds from source). Run: {APT_HINT}")
+    cached = sum(1 for e in music_manifest() if _is_cached(e))
+    total = len(music_manifest())
+    if cached:
+        _ok(f"music: {cached}/{total} manifest tracks cached in {MUSIC_DIR}")
+    else:
+        _info(f"music: no tracks cached — run: manim-kit music fetch  (for --music)")
     status = _skill_status()
     (_ok if status == "current" else _info)(f"Claude skill '{SKILL_NAME}': {status}")
     print("  all good" if problems == 0 else f"  {problems} problem(s)")
@@ -430,8 +626,25 @@ def cmd_render(args: argparse.Namespace) -> int:
     cmd.append(path)
     cmd += scenes
 
+    # Music only makes sense for a video output; a PNG or GIF carries no audio track.
+    want_music = getattr(args, "music", False)
+    silent_output = args.last_frame or args.format in ("png", "gif")
+    if want_music and silent_output:
+        _warn(f"--music ignored: {'--last-frame' if args.last_frame else args.format} output has no audio")
+        want_music = False
+    track = credit = None
+    if want_music:
+        try:
+            track, credit = resolve_track(args.track)
+        except RuntimeError as exc:
+            _fail(str(exc))
+
     if args.dry_run:
         print(" ".join(cmd))
+        if want_music:
+            print(" ".join(mux_command("<video.mp4>", track, "<video.mp4>.music.mp4",
+                                       duration=60.0, gain=args.music_gain,
+                                       fade=0.0 if args.no_music_fade else MUSIC_FADE)))
         return 0
 
     start = time.time()
@@ -441,13 +654,82 @@ def cmd_render(args: argparse.Namespace) -> int:
     if proc.returncode != 0:
         _fail(f"manim exited with {proc.returncode}", proc.returncode)
     outputs = _media_outputs(scene_dir, stem, since=start)
+    mixed = 0
+    if want_music:
+        for p in outputs:
+            if p.lower().endswith(".mp4") and mux_music(
+                p, track, args.music_gain, 0.0 if args.no_music_fade else MUSIC_FADE
+            ):
+                mixed += 1
     if outputs:
         print("Output:")
         for p in outputs:
             print(f"  {p}")
     else:
         _warn("render finished but no new files found under media/")
+    if mixed and credit:
+        print("Music credit — put this in the video description:")
+        print(f"  {credit}")
     return 0
+
+
+def cmd_music(args: argparse.Namespace) -> int:
+    manifest = music_manifest()
+    action = args.action or "list"
+
+    if action == "list":
+        local = _local_tracks()
+        for entry in manifest:
+            mark = "cached" if _is_cached(entry) else "not fetched"
+            print(f"  {entry['id']:<24} {entry['title']} — {entry['artist']} "
+                  f"({entry['licence']}) [{mark}]")
+            local.pop(str(entry["id"]), None)
+        for stem, path in local.items():
+            print(f"  {stem:<24} (your own file: {path})")
+        if not manifest and not local:
+            _info(f"no tracks; run: manim-kit music fetch")
+        return 0
+
+    if action == "fetch":
+        wanted = args.ids or [str(e["id"]) for e in manifest]
+        failed = 0
+        for track_id in wanted:
+            entry = _manifest_entry(track_id)
+            if entry is None:
+                _warn(f"not in the manifest: {track_id}")
+                failed += 1
+                continue
+            try:
+                path = fetch_track(entry, force=args.force)
+            except RuntimeError as exc:
+                _warn(str(exc))
+                failed += 1
+                continue
+            _ok(f"{entry['id']} → {path}")
+        return 1 if failed else 0
+
+    if action == "add":
+        if not args.ids:
+            _fail("music add needs a file path")
+        src = args.ids[0]
+        if not os.path.isfile(src):
+            _fail(f"no such file: {src}")
+        track_id = args.id or os.path.splitext(os.path.basename(src))[0]
+        dst = os.path.join(MUSIC_DIR, track_id + os.path.splitext(src)[1].lower())
+        os.makedirs(MUSIC_DIR, exist_ok=True)
+        shutil.copy2(src, dst)
+        _ok(f"added {track_id} → {dst}")
+        print(f"Use it with: manim-kit render FILE.py --music --track {track_id}")
+        return 0
+
+    if action == "credits":
+        wanted = args.ids or [str(e["id"]) for e in manifest]
+        for track_id in wanted:
+            entry = _manifest_entry(track_id)
+            print(entry["credit"] if entry else f"(no credit on record for {track_id})")
+        return 0
+
+    _fail(f"unknown music action: {action}")
 
 
 def cmd_open(args: argparse.Namespace) -> int:
@@ -565,7 +847,25 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--format", choices=["mp4", "gif", "png", "webm", "mov"])
     s.add_argument("-o", "--output", help="output file name (passed to manim -o)")
     s.add_argument("--dry-run", action="store_true", help="print the manim command and exit")
+    s.add_argument("--music", action="store_true", help="mix a background track under the render")
+    s.add_argument("--track", help="track id (default: first in music.json, or $MANIM_KIT_TRACK)")
+    s.add_argument("--music-gain", type=float, default=MUSIC_GAIN,
+                   help=f"music volume, 1.0 = unchanged (default: {MUSIC_GAIN})")
+    s.add_argument("--no-music-fade", action="store_true", help="no fade in/out on the music")
     s.set_defaults(func=cmd_render)
+
+    s = sub.add_parser(
+        "music", help="manage the background-music library",
+        epilog="The real 3Blue1Brown music is all rights reserved and licensed per "
+               f"project at {RUBINETTI_FORM} — it cannot be shipped here. These tracks "
+               "are CC BY; the credit line printed after a --music render belongs in "
+               "your video description.",
+    )
+    s.add_argument("action", nargs="?", choices=["list", "fetch", "add", "credits"], default="list")
+    s.add_argument("ids", nargs="*", help="track ids (fetch/credits) or a file path (add)")
+    s.add_argument("--id", help="id to store an added file under (default: its filename)")
+    s.add_argument("--force", action="store_true", help="re-download even when cached")
+    s.set_defaults(func=cmd_music)
 
     s = sub.add_parser("open", help="open the newest render of a scene file")
     s.add_argument("file")

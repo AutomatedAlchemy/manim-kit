@@ -1,0 +1,88 @@
+{
+  "_comment": [
+    "Background-music library for `manim-kit render --music`. Text only: the MP3s are",
+    "fetched into ~/.cache/manim-kit/music/ by `manim-kit music fetch`, never committed.",
+    "",
+    "The real 3Blue1Brown music (Vincent Rubinetti) is all rights reserved and licensed",
+    "per project through https://vincerubinetti.github.io/using-the-music-of-3blue1brown/",
+    "- it cannot be shipped or auto-fetched by a tool. These are CC BY tracks with a",
+    "similar sparse ambient piano/synth sound.",
+    "",
+    "Rejected sources and why: Pixabay (terms forbid scripted collection and bulk",
+    "copying), Blue Dot Sessions (free tier is CC BY-NC), Free Music Archive (download",
+    "endpoint is login-gated, old API dead), Scott Buckley (CC BY plus added terms",
+    "against redistributing the files standalone - fetch-on-demand only, never re-host),",
+    "Kai Engel (mixed per album, several NC).",
+    "",
+    "Every entry needs a credit line that the user must put in the video description.",
+    "sha256 is verified after download; a mismatch is an error, not a warning."
+  ],
+  "tracks": [
+    {
+      "id": "cylinder-five",
+      "title": "Cylinder Five",
+      "artist": "Chris Zabriskie",
+      "album": "Cylinders",
+      "licence": "CC BY 4.0",
+      "credit": "Cylinder Five by Chris Zabriskie - licensed under CC BY 4.0 - https://chriszabriskie.com",
+      "url": "https://archive.org/download/Cylinders-15736/Chris_Zabriskie_-_05_-_Cylinder_Five.mp3",
+      "sha256": "6b890b6ec072453f86aac5f3175df496dbeaf4591d42ceaf75f2681acf8b08d0",
+      "bytes": 7157383
+    },
+    {
+      "id": "cylinder-two",
+      "title": "Cylinder Two",
+      "artist": "Chris Zabriskie",
+      "album": "Cylinders",
+      "licence": "CC BY 4.0",
+      "credit": "Cylinder Two by Chris Zabriskie - licensed under CC BY 4.0 - https://chriszabriskie.com",
+      "url": "https://archive.org/download/Cylinders-15736/Chris_Zabriskie_-_02_-_Cylinder_Two.mp3",
+      "sha256": "fc6a97f8a1e47d22793819b73a0c4e2fb0969ffe6e064eaea2b3e6c0ce3f30ad",
+      "bytes": 9328680
+    },
+    {
+      "id": "i-will-take-you-home",
+      "title": "I Will Take You Home",
+      "artist": "Chris Zabriskie",
+      "album": "The Black Hole",
+      "licence": "CC BY 4.0",
+      "credit": "I Will Take You Home by Chris Zabriskie - licensed under CC BY 4.0 - https://chriszabriskie.com",
+      "url": "https://archive.org/download/cz-blackhole/03%20-%20I%20Will%20Take%20You%20Home.mp3",
+      "sha256": "c342e2d300efd98fe55cc1734c766d50b62f3104061591404546a550834544ff",
+      "bytes": 3331964
+    },
+    {
+      "id": "its-all-around-you",
+      "title": "It's All Around You",
+      "artist": "Chris Zabriskie",
+      "album": "The Black Hole",
+      "licence": "CC BY 4.0",
+      "credit": "It's All Around You by Chris Zabriskie - licensed under CC BY 4.0 - https://chriszabriskie.com",
+      "url": "https://archive.org/download/cz-blackhole/08%20-%20It%27s%20All%20Around%20You.mp3",
+      "sha256": "ca2e8e742d253e492136ad7f1fbbb8d5c67ebba961dcb9973ad22774170763c0",
+      "bytes": 4874744
+    },
+    {
+      "id": "out-of-the-skies",
+      "title": "Out of the Skies, Under the Earth",
+      "artist": "Chris Zabriskie",
+      "album": "Reappear",
+      "licence": "CC BY 3.0",
+      "credit": "Out of the Skies, Under the Earth by Chris Zabriskie - licensed under CC BY 3.0 - https://chriszabriskie.com",
+      "url": "https://archive.org/download/ChrisZabriskieReappear/Chris%20Zabriskie%20-%20Reappear%20-%2003%20Out%20of%20the%20Skies%2C%20Under%20the%20Earth.mp3",
+      "sha256": "e82f2e78a8cb824acf279c9a106394e6aa986628683583c7fa3604abe7aaebfb",
+      "bytes": 6898688
+    },
+    {
+      "id": "virtues-inherited",
+      "title": "Virtues Inherited, Vices Passed On",
+      "artist": "Chris Zabriskie",
+      "album": "Reappear",
+      "licence": "CC BY 3.0",
+      "credit": "Virtues Inherited, Vices Passed On by Chris Zabriskie - licensed under CC BY 3.0 - https://chriszabriskie.com",
+      "url": "https://archive.org/download/ChrisZabriskieReappear/Chris%20Zabriskie%20-%20Reappear%20-%2007%20Virtues%20Inherited%2C%20Vices%20Passed%20On.mp3",
+      "sha256": "7628b255e17ea79510d0ef0b824e3da644bdeab01c64e2ee24a475ec9f8c3fbf",
+      "bytes": 6856704
+    }
+  ]
+}

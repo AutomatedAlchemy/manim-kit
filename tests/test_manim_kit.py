@@ -122,3 +122,86 @@ def test_skill_frontmatter():
     assert head[0] == "---"
     assert head[1] == "name: manim-kit"
     assert head[2].startswith("description: ")
+
+
+# --- music -------------------------------------------------------------------------
+
+def test_music_manifest_entries_are_complete():
+    tracks = mk.music_manifest()
+    assert tracks, "music.json has no tracks"
+    ids = [t["id"] for t in tracks]
+    assert len(ids) == len(set(ids))
+    for t in tracks:
+        for key in ("id", "title", "artist", "licence", "credit", "url", "sha256"):
+            assert t.get(key), f"{t.get('id')} missing {key}"
+        assert len(t["sha256"]) == 64
+        assert t["url"].startswith("https://")
+        assert t["licence"] in t["credit"]
+
+
+def test_fetch_track_verifies_and_is_idempotent(tmp_path, monkeypatch):
+    import hashlib
+    src = tmp_path / "tone.mp3"
+    src.write_bytes(b"not really an mp3")
+    cache = tmp_path / "cache"
+    monkeypatch.setattr(mk, "MUSIC_DIR", str(cache))
+    entry = {"id": "probe", "title": "Probe", "url": src.as_uri(),
+             "sha256": hashlib.sha256(src.read_bytes()).hexdigest()}
+
+    path = mk.fetch_track(entry)
+    assert os.path.isfile(path)
+    mtime = os.path.getmtime(path)
+    assert mk.fetch_track(entry) == path and os.path.getmtime(path) == mtime  # no re-download
+
+    bad = {**entry, "id": "bad", "sha256": "0" * 64}
+    with pytest.raises(RuntimeError, match="checksum mismatch"):
+        mk.fetch_track(bad)
+    assert not list(cache.glob("bad*"))  # nothing half-written left behind
+
+
+def test_resolve_track_rejects_unknown_id(tmp_path, monkeypatch):
+    monkeypatch.setattr(mk, "MUSIC_DIR", str(tmp_path / "empty"))
+    with pytest.raises(RuntimeError, match="unknown track"):
+        mk.resolve_track("no-such-track")
+
+
+def test_mux_command_fades_and_lowers_volume():
+    cmd = mk.mux_command("in.mp4", "t.mp3", "out.mp4", duration=30.0, gain=0.12, fade=2.0)
+    filters = cmd[cmd.index("-filter:a") + 1]
+    assert "afade=t=in:st=0:d=2" in filters
+    assert "afade=t=out:st=28.000:d=2" in filters
+    assert "volume=0.12" in filters
+    assert cmd[cmd.index("-c:v") + 1] == "copy"      # video is never re-encoded
+    assert "-shortest" in cmd and "-stream_loop" in cmd
+
+
+def test_render_dry_run_prints_ffmpeg_line(tmp_path, monkeypatch, capsys):
+    f = tmp_path / "one.py"
+    f.write_text("from manim import *\nclass Only(Scene): pass\n")
+    monkeypatch.setattr(mk, "_manim_version", lambda: "0.0-test")
+    monkeypatch.setattr(mk, "resolve_track", lambda tid: ("/tmp/t.mp3", "Credit line"))
+    assert mk.main(["render", str(f), "--dry-run", "--music"]) == 0
+    out = capsys.readouterr().out
+    assert "ffmpeg" in out and "afade" in out and "volume=0.12" in out
+
+
+def test_music_is_ignored_for_last_frame(tmp_path, monkeypatch, capsys):
+    f = tmp_path / "one.py"
+    f.write_text("from manim import *\nclass Only(Scene): pass\n")
+    monkeypatch.setattr(mk, "_manim_version", lambda: "0.0-test")
+    assert mk.main(["render", str(f), "--dry-run", "--music", "-s"]) == 0
+    out = capsys.readouterr().out
+    assert "--music ignored" in out and "ffmpeg" not in out
+
+
+def test_music_list_and_add(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(mk, "MUSIC_DIR", str(tmp_path / "cache"))
+    assert mk.main(["music", "list"]) == 0
+    listing = capsys.readouterr().out
+    assert "not fetched" in listing and "cached" not in listing.replace("not fetched", "")
+
+    own = tmp_path / "mine.mp3"
+    own.write_bytes(b"x")
+    assert mk.main(["music", "add", str(own)]) == 0
+    assert mk.main(["music", "list"]) == 0
+    assert "your own file" in capsys.readouterr().out
