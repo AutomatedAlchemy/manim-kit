@@ -95,6 +95,13 @@ the bundled skill changes.
 .venv/bin/python -m pytest tests
 ```
 
+On Windows the venv interpreter is `.venv\Scripts\python.exe`:
+
+```powershell
+.venv\Scripts\python.exe -m pip install pytest
+.venv\Scripts\python.exe -m pytest tests
+```
+
 `tests/test_render.py` really renders the basic template at `-q l` and skips
 itself when manim is not installed in `.venv`.
 

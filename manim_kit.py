@@ -18,7 +18,10 @@ __version__ = "0.1.0"
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 VENV_DIR = os.path.join(SCRIPT_DIR, ".venv")
-VENV_PYTHON = os.path.join(VENV_DIR, "bin", "python")
+if os.name == "nt":
+    VENV_PYTHON = os.path.join(VENV_DIR, "Scripts", "python.exe")
+else:
+    VENV_PYTHON = os.path.join(VENV_DIR, "bin", "python")
 TEMPLATE_DIR = os.path.join(SCRIPT_DIR, "templates")
 MANIM_REQUIREMENTS = os.path.join(SCRIPT_DIR, "requirements-manim.txt")
 
@@ -211,6 +214,9 @@ QUALITY = {
 }
 TEMPLATES = ("basic", "text", "graph", "threed")
 APT_HINT = "sudo apt install libpango1.0-dev libcairo2-dev pkg-config"
+WINDOWS = os.name == "nt"
+WINGET_FFMPEG = "winget install Gyan.FFmpeg"
+WINGET_LATEX = "winget install MiKTeX.MiKTeX"
 
 
 # --- helpers -----------------------------------------------------------------------
@@ -328,6 +334,9 @@ def _newest_output(scene_dir: str, stem: str) -> Optional[str]:
 
 
 def _xdg_open(path: str) -> None:
+    if WINDOWS:
+        os.startfile(path)  # the file's default application
+        return
     opener = shutil.which("xdg-open")
     if opener is None:
         _warn(f"xdg-open not found; open manually: {path}")
@@ -514,7 +523,13 @@ def cmd_setup(args: argparse.Namespace) -> int:
     if proc.returncode != 0:
         tail = "\n".join(proc.stderr.strip().splitlines()[-15:])
         print(tail, file=sys.stderr)
-        if "pangocairo" in proc.stderr or "manimpango" in proc.stderr:
+        if WINDOWS:
+            # manimpango ships Windows wheels, so a pip failure here is not a
+            # missing system library and apt is not the answer.
+            _warn("pip could not install manim. Read the error above; "
+                  "manimpango has Windows wheels, so this is not a missing "
+                  "Pango/Cairo build dependency.")
+        elif "pangocairo" in proc.stderr or "manimpango" in proc.stderr:
             _warn("ManimPango has no Linux wheels and must compile against Pango/Cairo headers.")
             print(f"Run: {APT_HINT} && manim-kit setup")
         return 1
@@ -531,21 +546,36 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     else:
         problems += 1
         _warn(f"manim not installed in {VENV_DIR} — run: manim-kit setup")
-    for exe, why, required in (
+    if WINDOWS:
+        install_hint = {
+            "ffmpeg": WINGET_FFMPEG,
+            "latex": f"{WINGET_LATEX}  (MiKTeX; TeX Live works too)",
+            "dvisvgm": f"{WINGET_LATEX}  (dvisvgm comes with MiKTeX)",
+        }
+    else:
+        install_hint = {}
+    probes = [
         ("ffmpeg", "video encoding (required)", True),
         ("latex", "Tex/MathTex (optional — Text() works without)", False),
         ("dvisvgm", "Tex/MathTex SVG conversion (optional)", False),
-        ("xdg-open", "`manim-kit open` (optional)", False),
-    ):
+    ]
+    if not WINDOWS:  # Windows opens files through os.startfile, no helper needed
+        probes.append(("xdg-open", "`manim-kit open` (optional)", False))
+    for exe, why, required in probes:
         path = shutil.which(exe)
         if path:
             _ok(f"{exe}: {path}")
-        elif required:
+            continue
+        hint = install_hint.get(exe)
+        note = f"{exe} missing — {why}" + (f". Install: {hint}" if hint else "")
+        if required:
             problems += 1
-            _warn(f"{exe} missing — {why}")
+            _warn(note)
         else:
-            _info(f"{exe} missing — {why}")
-    pkgconfig = shutil.which("pkg-config")
+            _info(note)
+    # manimpango ships Windows wheels, so the Pango/Cairo header check is a
+    # Linux-only concern.
+    pkgconfig = None if WINDOWS else shutil.which("pkg-config")
     if pkgconfig and ver is None:
         have = subprocess.run([pkgconfig, "--exists", "pangocairo"], capture_output=True).returncode == 0
         if not have:
