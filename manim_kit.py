@@ -60,7 +60,7 @@ explainer clip, an animated plot, or asks to "manim" something. It wraps
 | Draft render (480p15, seconds) | `manim-kit render FILE.py SceneName -q l` |
 | Render every scene in the file | `manim-kit render FILE.py --all` |
 | GIF / PNG last frame / transparent | `--format gif` · `--last-frame` · `--transparent` |
-| Render with a music bed under it | `manim-kit render FILE.py --music` |
+| Render silent (music is on by default) | `manim-kit render FILE.py --no-music` |
 | Music library | `manim-kit music list\\|fetch\\|add FILE\\|credits` |
 | Open the newest render of a file | `manim-kit open FILE.py` |
 
@@ -84,20 +84,21 @@ beat one long one — they render and debug independently.
 
 ## Music
 
-`--music` mixes an ambient track under the finished MP4 with ffmpeg: looped or trimmed to
-the exact video length, faded in and out, at `volume=0.12` so a later voice-over sits on
-top (`--music-gain` to change it). The video is not re-encoded, so it costs a second.
-First use downloads the track into `~/.cache/manim-kit/music/`; `manim-kit music fetch`
-does it ahead of time. `--track ID` picks another one, `manim-kit music add FILE` takes
-the user's own audio.
+Renders mix an ambient track under the finished MP4 by default, with ffmpeg: looped or
+trimmed to the exact video length, faded in and out, at `volume=0.12` so a later
+voice-over sits on top (`--music-gain` to change it, `--no-music` to skip it). The video
+is not re-encoded, so it costs a second. First use downloads the track into
+`~/.cache/manim-kit/music/`; `manim-kit music fetch` does it ahead of time. `--track ID`
+picks another one, `manim-kit music add FILE` takes the user's own audio.
 
-The bundled tracks are Chris Zabriskie, CC BY. **After a `--music` render the command
+The bundled tracks are Chris Zabriskie, CC BY. **After a render with music the command
 prints a credit line — tell the user it has to go into the video description.** The actual
 3Blue1Brown music (Vincent Rubinetti) is all rights reserved and licensed per project via
 `https://vincerubinetti.github.io/using-the-music-of-3blue1brown/`; do not download or
 suggest ripping it, point at that form instead.
 
-`--music` is ignored for `--last-frame`, `--format png` and `--format gif` — no audio track.
+Music is skipped automatically for `--last-frame`, `--format png` and `--format gif` — no
+audio track.
 
 ## Manim CE cheat sheet (v0.19+)
 
@@ -585,7 +586,7 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     if cached:
         _ok(f"music: {cached}/{total} manifest tracks cached in {MUSIC_DIR}")
     else:
-        _info(f"music: no tracks cached — run: manim-kit music fetch  (for --music)")
+        _info(f"music: no tracks cached — run: manim-kit music fetch")
     status = _skill_status()
     (_ok if status == "current" else _info)(f"Claude skill '{SKILL_NAME}': {status}")
     print("  all good" if problems == 0 else f"  {problems} problem(s)")
@@ -660,7 +661,6 @@ def cmd_render(args: argparse.Namespace) -> int:
     want_music = getattr(args, "music", False)
     silent_output = args.last_frame or args.format in ("png", "gif")
     if want_music and silent_output:
-        _warn(f"--music ignored: {'--last-frame' if args.last_frame else args.format} output has no audio")
         want_music = False
     track = credit = None
     if want_music:
@@ -749,7 +749,7 @@ def cmd_music(args: argparse.Namespace) -> int:
         os.makedirs(MUSIC_DIR, exist_ok=True)
         shutil.copy2(src, dst)
         _ok(f"added {track_id} → {dst}")
-        print(f"Use it with: manim-kit render FILE.py --music --track {track_id}")
+        print(f"Use it with: manim-kit render FILE.py --track {track_id}")
         return 0
 
     if action == "credits":
@@ -877,7 +877,8 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--format", choices=["mp4", "gif", "png", "webm", "mov"])
     s.add_argument("-o", "--output", help="output file name (passed to manim -o)")
     s.add_argument("--dry-run", action="store_true", help="print the manim command and exit")
-    s.add_argument("--music", action="store_true", help="mix a background track under the render")
+    s.add_argument("--no-music", dest="music", action="store_false", default=True,
+                   help="render silent, no background track")
     s.add_argument("--track", help="track id (default: first in music.json, or $MANIM_KIT_TRACK)")
     s.add_argument("--music-gain", type=float, default=MUSIC_GAIN,
                    help=f"music volume, 1.0 = unchanged (default: {MUSIC_GAIN})")
@@ -888,7 +889,7 @@ def build_parser() -> argparse.ArgumentParser:
         "music", help="manage the background-music library",
         epilog="The real 3Blue1Brown music is all rights reserved and licensed per "
                f"project at {RUBINETTI_FORM} — it cannot be shipped here. These tracks "
-               "are CC BY; the credit line printed after a --music render belongs in "
+               "are CC BY; the credit line printed after a render with music belongs in "
                "your video description.",
     )
     s.add_argument("action", nargs="?", choices=["list", "fetch", "add", "credits"], default="list")

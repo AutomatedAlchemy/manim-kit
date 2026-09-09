@@ -36,7 +36,7 @@ def test_render_with_music_adds_an_audio_stream(tmp_path):
     scene = str(tmp_path / "tune.py")
     mp4 = tmp_path / "media" / "videos" / "tune" / "480p15" / "Tune.mp4"
 
-    subprocess.run([sys.executable, SCRIPT, "render", scene, "-q", "l"], check=True, timeout=600)
+    subprocess.run([sys.executable, SCRIPT, "render", scene, "-q", "l", "--no-music"], check=True, timeout=600)
     silent_duration = _duration(mp4)
     assert _codec_types(mp4) == ["video"]
 
@@ -46,7 +46,7 @@ def test_render_with_music_adds_an_audio_stream(tmp_path):
     env = {**os.environ, "HOME": str(tmp_path)}  # keep the real ~/.cache out of it
     subprocess.run([sys.executable, SCRIPT, "music", "add", str(tone), "--id", "tone"],
                    check=True, env=env)
-    out = subprocess.run([sys.executable, SCRIPT, "render", scene, "-q", "l", "--music",
+    out = subprocess.run([sys.executable, SCRIPT, "render", scene, "-q", "l",
                           "--track", "tone"], capture_output=True, text=True, timeout=600, env=env)
 
     assert out.returncode == 0, out.stderr[-2000:]

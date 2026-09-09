@@ -11,7 +11,7 @@ holds only the host-side `cli-tool-kit` pin for `--install`/`--remove`.
   import), `SKILL_MD_CONTENT`, subcommands `setup doctor new list render music open`,
   installer-protocol flags. `scene_classes()` is an AST scan, no manim import.
 - `templates/*.py` — scene templates; `{{SCENE}}` is the class-name placeholder.
-- `music.json` — background-music manifest for `render --music` (id, licence, credit,
+- `music.json` — background-music manifest for `render` (id, licence, credit,
   URL, sha256). Text only: MP3s are fetched to `~/.cache/manim-kit/music/`, never
   committed. Only licences that permit redistribution belong here — the real 3Blue1Brown
   music is all rights reserved and must never be added. Mixing is a post-render ffmpeg

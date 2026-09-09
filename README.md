@@ -44,7 +44,7 @@ manim-kit render pythagoras.py -s             # last frame as PNG
 manim-kit open pythagoras.py                  # newest render of that file
 manim-kit render f.py -- --disable_caching    # anything after -- goes to `manim render`
 
-manim-kit render pythagoras.py --music        # ambient bed under the finished mp4
+manim-kit render pythagoras.py --no-music     # skip the ambient bed (on by default)
 manim-kit music list                          # library, with what is cached
 manim-kit music fetch                         # pre-download every bundled track
 manim-kit music add ~/my_track.mp3            # use your own audio
@@ -59,17 +59,19 @@ file; `render` prints the paths it produced.
 
 ## Music
 
-`--music` mixes a background track under the finished MP4 with ffmpeg: looped or trimmed
-to the exact video length, faded in and out, at `volume=0.12` (about -18 dB) so a later
-voice-over still sits on top. `--music-gain` changes that, `--no-music-fade` drops the
-fades. The video stream is copied, not re-encoded, so it costs a second regardless of
-quality preset; if ffmpeg fails the silent render is left intact.
+Renders get a background track under the finished MP4 by default, mixed with ffmpeg:
+looped or trimmed to the exact video length, faded in and out, at `volume=0.12` (about
+-18 dB) so a later voice-over still sits on top. Pass `--no-music` for a silent render;
+`--music-gain` changes the level, `--no-music-fade` drops the fades. The video stream is
+copied, not re-encoded, so it costs a second regardless of quality preset; if ffmpeg
+fails the silent render is left intact. Music is skipped automatically for `--last-frame`,
+`--format png` and `--format gif` — no audio track.
 
 Tracks are fetched on first use into `~/.cache/manim-kit/music/` and checked against the
 SHA-256 in `music.json` — no audio is committed to this repo. The bundled set is six
 [Chris Zabriskie](https://chriszabriskie.com) tracks (*Cylinders*, *The Black Hole*,
-*Reappear*) under **CC BY 4.0 / CC BY 3.0**, mirrored on archive.org. Each `--music`
-render prints the attribution line, which has to go into your video description;
+*Reappear*) under **CC BY 4.0 / CC BY 3.0**, mirrored on archive.org. Each render with
+music prints the attribution line, which has to go into your video description;
 `manim-kit music credits` reprints them.
 
 The actual 3Blue1Brown soundtrack by Vincent Rubinetti is **all rights reserved** — free

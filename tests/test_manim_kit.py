@@ -180,18 +180,27 @@ def test_render_dry_run_prints_ffmpeg_line(tmp_path, monkeypatch, capsys):
     f.write_text("from manim import *\nclass Only(Scene): pass\n")
     monkeypatch.setattr(mk, "_manim_version", lambda: "0.0-test")
     monkeypatch.setattr(mk, "resolve_track", lambda tid: ("/tmp/t.mp3", "Credit line"))
-    assert mk.main(["render", str(f), "--dry-run", "--music"]) == 0
+    assert mk.main(["render", str(f), "--dry-run"]) == 0
     out = capsys.readouterr().out
     assert "ffmpeg" in out and "afade" in out and "volume=0.12" in out
+
+
+def test_render_no_music_dry_run(tmp_path, monkeypatch, capsys):
+    f = tmp_path / "one.py"
+    f.write_text("from manim import *\nclass Only(Scene): pass\n")
+    monkeypatch.setattr(mk, "_manim_version", lambda: "0.0-test")
+    assert mk.main(["render", str(f), "--dry-run", "--no-music"]) == 0
+    out = capsys.readouterr().out
+    assert "ffmpeg" not in out
 
 
 def test_music_is_ignored_for_last_frame(tmp_path, monkeypatch, capsys):
     f = tmp_path / "one.py"
     f.write_text("from manim import *\nclass Only(Scene): pass\n")
     monkeypatch.setattr(mk, "_manim_version", lambda: "0.0-test")
-    assert mk.main(["render", str(f), "--dry-run", "--music", "-s"]) == 0
+    assert mk.main(["render", str(f), "--dry-run", "-s"]) == 0
     out = capsys.readouterr().out
-    assert "--music ignored" in out and "ffmpeg" not in out
+    assert "ffmpeg" not in out
 
 
 def test_music_list_and_add(tmp_path, monkeypatch, capsys):

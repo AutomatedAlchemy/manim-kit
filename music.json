@@ -1,6 +1,6 @@
 {
   "_comment": [
-    "Background-music library for `manim-kit render --music`. Text only: the MP3s are",
+    "Background-music library for `manim-kit render`. Text only: the MP3s are",
     "fetched into ~/.cache/manim-kit/music/ by `manim-kit music fetch`, never committed.",
     "",
     "The real 3Blue1Brown music (Vincent Rubinetti) is all rights reserved and licensed",
