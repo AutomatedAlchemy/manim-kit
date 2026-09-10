@@ -3,7 +3,7 @@
 CLI wrapper + Claude skill for Manim Community. Single stdlib-only entry
 point `manim_kit.py`; manim lives in the tool-owned `.venv/` (gitignored) that
 `manim-kit setup` creates from `requirements-manim.txt`. `requirements.txt`
-holds only the host-side `cli-tool-kit` pin for `--install`/`--remove`.
+holds only the host-side `cli-tools-kit` pin for `--install`/`--remove`.
 
 ## Layout
 

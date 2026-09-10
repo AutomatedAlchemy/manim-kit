@@ -6,14 +6,14 @@ scene from a template, list the scenes in a file, render at a quality preset,
 open the result. Ships a Claude Code skill with a Manim cheat sheet so an AI
 session can write and render animations for you.
 
-Built on the [cli-tool-kit](https://github.com/Probst1nator/cli-tool-kit)
+Built on the [cli-tools-kit](https://github.com/Probst1nator/cli-tools-kit)
 installer protocol (`--advertise`, `--install`, `--install-skill`).
 
 ## Install
 
 ```bash
 git clone <this repo> ~/manim-kit && cd ~/manim-kit
-pip install -r requirements.txt      # cli-tool-kit, for --install only
+pip install -r requirements.txt      # cli-tools-kit, for --install only
 python3 manim_kit.py --install       # bash alias `manim-kit` + Claude skill
 source ~/.bashrc
 manim-kit setup                      # creates .venv with manim, runs doctor

@@ -6,7 +6,7 @@ Stdlib-only entry point. Manim itself lives in a tool-owned virtualenv
 is delegated to that interpreter, so the host Python stays clean and the
 ``--advertise`` probe answers instantly.
 
-Speaks the cli-tool-kit installer protocol (``--advertise``, ``--install``,
+Speaks the cli-tools-kit installer protocol (``--advertise``, ``--install``,
 ``--remove``, ``--install-skill``, ``--uninstall-skill``).
 """
 
@@ -805,12 +805,12 @@ def _uninstall_skill() -> None:
 
 def _tool_installer():
     try:
-        from cli_tool_kit import ToolInstaller, ToolMetadata  # lazy: only --install/--remove need it
+        from cli_tools_kit import ToolInstaller, ToolMetadata  # lazy: only --install/--remove need it
     except ImportError:
-        _fail("cli-tool-kit is not importable by this interpreter.\n"
+        _fail("cli-tools-kit is not importable by this interpreter.\n"
               "Run: pip install -r requirements.txt   (or use the AutomatedAlchemy installer GUI)")
     import dataclasses
-    # skill_name is advertise-only; keep whatever fields this cli-tool-kit version knows.
+    # skill_name is advertise-only; keep whatever fields this cli-tools-kit version knows.
     known = {f.name for f in dataclasses.fields(ToolMetadata)}
     meta = ToolMetadata(**{k: v for k, v in METADATA.items() if k in known})
     return ToolInstaller(script_path=os.path.abspath(__file__), metadata=meta)
