@@ -14,6 +14,15 @@ import json
 import os
 import sys
 
+# Windows pipes default to the ANSI codepage (cp1252 on a German install), which
+# cannot encode the emoji in _ok()/_warn()/_fail(). The installer captures our
+# stdout, so without this any run that prints one dies with UnicodeEncodeError.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[attr-defined]
+    except (AttributeError, ValueError):  # not a reconfigurable text stream
+        pass
+
 __version__ = "0.1.0"
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
