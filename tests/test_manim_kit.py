@@ -93,7 +93,8 @@ def test_render_dry_run_builds_manim_command(tmp_path, monkeypatch, capsys):
     rc = mk.main(["render", str(f), "-q", "h", "--format", "gif", "-s", "--dry-run",
                   "--", "--disable_caching"])
     assert rc == 0
-    cmd = capsys.readouterr().out.strip().split()
+    # The manim command is the first line; the voice environment follows it.
+    cmd = capsys.readouterr().out.strip().splitlines()[0].split()
     assert cmd[1:4] == ["-m", "manim", "render"]
     assert cmd[cmd.index("-q") + 1] == "h"
     assert "--format" in cmd and "gif" in cmd and "-s" in cmd
@@ -214,3 +215,154 @@ def test_music_list_and_add(tmp_path, monkeypatch, capsys):
     assert mk.main(["music", "add", str(own)]) == 0
     assert mk.main(["music", "list"]) == 0
     assert "your own file" in capsys.readouterr().out
+
+
+# --- narration ---------------------------------------------------------------------
+
+def test_narrated_template_is_in_the_list_and_compiles():
+    assert "narrated" in mk.TEMPLATES
+    src = mk.render_template("narrated", "Probe")
+    assert "{{SCENE}}" not in src
+    assert "class Probe(VoiceoverScene)" in src
+    assert "default_service()" in src
+    assert "wait_until_bookmark" in src and "bookmark mark=" in src
+    compile(src, "narrated.py", "exec")
+
+
+def test_voice_manifest_default_is_curated():
+    manifest = mk.voice_manifest()
+    assert manifest, "voice.json is missing"
+    specs = [v["spec"] for v in mk.curated_voices()]
+    assert manifest["default"] in specs
+    assert len(specs) == len(set(specs))
+    for entry in mk.curated_voices():
+        assert entry["spec"].split(":")[0] in manifest["backends"]
+        assert entry["lang"] and entry["note"]
+
+
+def test_kokoro_manifest_has_both_files():
+    files = mk.kokoro_manifest()
+    assert {str(e["name"]) for e in files} == {"kokoro-v1.0.onnx", "voices-v1.0.bin"}
+    for entry in files:
+        assert len(str(entry["sha256"])) == 64
+        assert str(entry["url"]).startswith("https://")
+
+
+def test_voice_default_prefers_the_environment(monkeypatch):
+    monkeypatch.delenv("MANIM_KIT_VOICE", raising=False)
+    assert mk.voice_default() == mk.voice_manifest()["default"]
+    monkeypatch.setenv("MANIM_KIT_VOICE", "kokoro-v1:af_sky")
+    assert mk.voice_default() == "kokoro-v1:af_sky"
+
+
+@pytest.mark.parametrize("spec,ok", [
+    ("kokoro-v1:af_sarah", True),
+    ("gemini-flash-tts:Aoede:de", True),
+    ("piper:thorsten", False),
+    ("kokoro-v1", False),
+    ("kokoro-v1:", False),
+])
+def test_valid_spec(spec, ok):
+    assert mk._valid_spec(spec) is ok
+
+
+def test_fetch_voice_file_verifies_and_is_idempotent(tmp_path, monkeypatch):
+    import hashlib
+    src = tmp_path / "model.onnx"
+    src.write_bytes(b"pretend this is 325 MB of ONNX")
+    monkeypatch.setattr(mk, "VOICE_DIR", str(tmp_path / "cache"))
+    entry = {"name": "model.onnx", "url": src.as_uri(), "bytes": len(src.read_bytes()),
+             "sha256": hashlib.sha256(src.read_bytes()).hexdigest()}
+
+    path = mk.fetch_voice_file(entry)
+    assert os.path.isfile(path)
+    mtime = os.path.getmtime(path)
+    assert mk.fetch_voice_file(entry) == path and os.path.getmtime(path) == mtime
+
+    bad = {**entry, "name": "bad.onnx", "sha256": "0" * 64}
+    with pytest.raises(RuntimeError, match="checksum mismatch"):
+        mk.fetch_voice_file(bad)
+    assert not list((tmp_path / "cache").glob("bad*"))   # nothing half-written left
+
+
+# --- mux with and without a voice track --------------------------------------------
+
+def test_mux_command_without_voice_is_unchanged():
+    """A silent render must still get exactly the old, simple command."""
+    cmd = mk.mux_command("in.mp4", "t.mp3", "out.mp4", duration=30.0, voice=False)
+    assert "-filter_complex" not in cmd
+    assert cmd[cmd.index("-filter:a") + 1].endswith("volume=0.12")
+    assert cmd[cmd.index("-map") + 1] == "0:v"
+    assert "1:a" in cmd                       # the music replaces the audio track
+    assert "sidechaincompress" not in " ".join(cmd)
+
+
+def test_mux_command_with_voice_ducks_the_bed():
+    cmd = mk.mux_command("in.mp4", "t.mp3", "out.mp4", duration=30.0, voice=True, duck=True)
+    graph = cmd[cmd.index("-filter_complex") + 1]
+    assert "volume=0.12" in graph
+    assert "afade=t=in:st=0:d=2" in graph and "afade=t=out:st=28.000:d=2" in graph
+    assert f"sidechaincompress=threshold={mk.DUCK_THRESHOLD:g}:ratio={mk.DUCK_RATIO:g}" in graph
+    assert f"attack={mk.DUCK_ATTACK_MS:g}:release={mk.DUCK_RELEASE_MS:g}" in graph
+    assert "[0:a]asplit=2[vkey][vout]" in graph          # voice keys the compressor
+    assert "amix=inputs=2:duration=first:normalize=0" in graph
+    assert cmd[cmd.index("-map") + 1] == "0:v"
+    assert "[mix]" in cmd
+    assert cmd[cmd.index("-c:v") + 1] == "copy"          # still no re-encode
+    assert "-shortest" in cmd and "-stream_loop" in cmd
+
+
+def test_mux_command_with_voice_and_no_ducking_is_a_flat_bed():
+    cmd = mk.mux_command("in.mp4", "t.mp3", "out.mp4", duration=30.0, voice=True, duck=False)
+    graph = cmd[cmd.index("-filter_complex") + 1]
+    assert "sidechaincompress" not in graph
+    assert "asplit" not in graph
+    assert "volume=0.12" in graph
+    assert "amix=inputs=2:duration=first:normalize=0" in graph   # both tracks still mixed
+
+
+def test_render_dry_run_reports_the_voice_environment(tmp_path, monkeypatch, capsys):
+    f = tmp_path / "one.py"
+    f.write_text("from manim import *\nclass Only(VoiceoverScene): pass\n")
+    monkeypatch.setattr(mk, "_manim_version", lambda: "0.0-test")
+    monkeypatch.setattr(mk, "resolve_track", lambda tid: ("/tmp/t.mp3", "Credit line"))
+    monkeypatch.delenv("MANIM_KIT_VOICE", raising=False)
+    assert mk.main(["render", str(f), "--dry-run", "--voice", "kokoro-v1:af_heart", "--srt"]) == 0
+    out = capsys.readouterr().out
+
+    assert "MANIM_KIT_VOICE=kokoro-v1:af_heart" in out
+    assert "MANIM_KIT_SRT=1" in out
+    assert f"PYTHONPATH={mk.SCRIPT_DIR}" in out    # so `import manim_kit_voice` resolves
+    assert "sidechaincompress" in out             # a narrated render ducks the bed
+
+
+def test_render_dry_run_no_ducking(tmp_path, monkeypatch, capsys):
+    f = tmp_path / "one.py"
+    f.write_text("from manim import *\nclass Only(VoiceoverScene): pass\n")
+    monkeypatch.setattr(mk, "_manim_version", lambda: "0.0-test")
+    monkeypatch.setattr(mk, "resolve_track", lambda tid: ("/tmp/t.mp3", "Credit line"))
+    assert mk.main(["render", str(f), "--dry-run", "--voice", "kokoro-v1:af_sarah",
+                    "--no-ducking"]) == 0
+    out = capsys.readouterr().out
+    assert "sidechaincompress" not in out
+    assert "amix=inputs=2" in out
+
+
+def test_render_rejects_an_unknown_voice_spec(tmp_path, monkeypatch):
+    f = tmp_path / "one.py"
+    f.write_text("from manim import *\nclass Only(Scene): pass\n")
+    monkeypatch.setattr(mk, "_manim_version", lambda: "0.0-test")
+    with pytest.raises(SystemExit):
+        mk.main(["render", str(f), "--dry-run", "--voice", "piper:thorsten"])
+
+
+def test_voice_list_marks_the_default(monkeypatch, capsys):
+    monkeypatch.setattr(mk, "_voice_check", lambda: [])
+    monkeypatch.delenv("MANIM_KIT_VOICE", raising=False)
+    assert mk.main(["voice", "list"]) == 0
+    out = capsys.readouterr().out
+    default = mk.voice_manifest()["default"]
+    assert f" * {default}" in out
+    for entry in mk.curated_voices():
+        assert entry["spec"] in out
+    assert f"Default: {default}" in out

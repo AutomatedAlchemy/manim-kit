@@ -1,3 +1,9 @@
 # Installed into the tool-owned .venv by `manim-kit setup`.
 # ManimPango has no Linux wheels: needs libpango1.0-dev libcairo2-dev pkg-config.
 manim>=0.19,<1.0
+
+# Narration (manim-kit voice / --voice). manim-voiceover drives the timing,
+# kokoro-onnx runs the local voice, soundfile writes its WAV.
+manim-voiceover[gemini]>=0.4,<0.5
+kokoro-onnx>=0.4,<0.5
+soundfile

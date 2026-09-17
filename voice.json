@@ -1,0 +1,95 @@
+{
+  "_comment": [
+    "Narration voices for `manim-kit render --voice` and `manim-kit voice say`.",
+    "Text only: the Kokoro model files are fetched into ~/.cache/manim-kit/voices/",
+    "by `manim-kit voice setup` and checked against the sha256 below, never committed.",
+    "",
+    "A spec string is 'backend:voice' or 'backend:voice:lang'. The default below is",
+    "fleet-wide, because this repo is synced to every host. $MANIM_KIT_VOICE overrides",
+    "it per host or per shell, and `--voice SPEC` overrides both.",
+    "",
+    "Two backends in this version (user decision 2026-09-17): kokoro-v1 runs offline on",
+    "the CPU and is the default; gemini-flash-tts calls the API, costs money and has the",
+    "better prosody plus real German. Piper, gTTS and edge-tts stay out - see",
+    "NARRATION-DESIGN.md for the licence reasoning.",
+    "",
+    "Gemini billing: $1 per 1M input text tokens plus $20 per 1M audio output tokens,",
+    "about $0.006 for a two-sentence narration line."
+  ],
+  "default": "kokoro-v1:af_sarah",
+  "backends": {
+    "kokoro-v1": {
+      "label": "Kokoro v1.0 (kokoro-onnx)",
+      "runs": "local CPU",
+      "licence": "Apache-2.0 model and code",
+      "note": "Offline. About 0.4x real time on a 12-thread laptop, so 10 minutes of narration takes 4 minutes."
+    },
+    "gemini-flash-tts": {
+      "label": "Gemini TTS",
+      "runs": "Google API, paid",
+      "model": "gemini-3.1-flash-tts-preview",
+      "licence": "Google Gemini API terms",
+      "note": "24 kHz PCM. Needs GEMINI_API_KEY. A leading instruction sentence is read as a directive, not spoken."
+    }
+  },
+  "voices": [
+    {
+      "spec": "kokoro-v1:af_sarah",
+      "lang": "en",
+      "note": "Default. Even, unhurried American female voice - the one to explain maths with."
+    },
+    {
+      "spec": "kokoro-v1:af_heart",
+      "lang": "en",
+      "note": "Warmer American female voice, a little more expressive than af_sarah."
+    },
+    {
+      "spec": "kokoro-v1:af_sky",
+      "lang": "en",
+      "note": "Lighter, younger American female voice."
+    },
+    {
+      "spec": "kokoro-v1:am_puck",
+      "lang": "en",
+      "note": "American male voice, the clearest of the male Kokoro set."
+    },
+    {
+      "spec": "gemini-flash-tts:Puck",
+      "lang": "en",
+      "note": "Lively male voice. Best prosody of the English options, and it costs money."
+    },
+    {
+      "spec": "gemini-flash-tts:Leda",
+      "lang": "en",
+      "note": "Calm female voice, good for a long explainer."
+    },
+    {
+      "spec": "gemini-flash-tts:Aoede:de",
+      "lang": "de",
+      "note": "German female voice. There is no offline German option in this version."
+    },
+    {
+      "spec": "gemini-flash-tts:Charon:de",
+      "lang": "de",
+      "note": "German male voice."
+    }
+  ],
+  "kokoro_model": {
+    "cache_dir": "~/.cache/manim-kit/voices",
+    "release": "https://github.com/thewh1teagle/kokoro-onnx/releases/tag/model-files-v1.0",
+    "files": [
+      {
+        "name": "kokoro-v1.0.onnx",
+        "url": "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/kokoro-v1.0.onnx",
+        "sha256": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+        "bytes": 325532387
+      },
+      {
+        "name": "voices-v1.0.bin",
+        "url": "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/voices-v1.0.bin",
+        "sha256": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d",
+        "bytes": 28214398
+      }
+    ]
+  }
+}

@@ -48,10 +48,19 @@ manim-kit render pythagoras.py --no-music     # skip the ambient bed (on by defa
 manim-kit music list                          # library, with what is cached
 manim-kit music fetch                         # pre-download every bundled track
 manim-kit music add ~/my_track.mp3            # use your own audio
+
+manim-kit new lecture --template narrated     # a scene that speaks
+manim-kit render lecture.py --voice kokoro-v1:af_heart
+manim-kit render lecture.py --srt             # also write subtitles
+manim-kit render lecture.py --no-ducking      # flat music bed
+manim-kit voice list                          # the voices, and which work here
+manim-kit voice say "A quick audition."       # preview without rendering
+manim-kit voice setup                         # cache the local Kokoro model
 ```
 
 Templates: `basic` (shapes + transform), `text` (Text + MathTex highlight),
-`graph` (Axes, plot, ValueTracker dot), `threed` (surface + camera orbit).
+`graph` (Axes, plot, ValueTracker dot), `threed` (surface + camera orbit),
+`narrated` (VoiceoverScene with two spoken blocks and a bookmark).
 
 Quality presets: `l` 480p15 · `m` 720p30 · `h` 1080p60 · `p` 1440p60 · `k` 2160p60.
 Output goes to `media/videos/<file-stem>/<res>/<Scene>.mp4` next to the scene
@@ -78,6 +87,81 @@ The actual 3Blue1Brown soundtrack by Vincent Rubinetti is **all rights reserved*
 to listen to, licensed per project through
 [his form](https://vincerubinetti.github.io/using-the-music-of-3blue1brown/), sometimes
 for a fee. It cannot be shipped or auto-fetched by a tool, so it is not in the manifest.
+
+## Narration
+
+`manim-kit render` can speak the scene. A narrated scene subclasses
+[manim-voiceover](https://github.com/ManimCommunity/manim-voiceover)'s `VoiceoverScene`
+and wraps each animation in a `with self.voiceover(...)` block: the line is synthesized
+before the block runs, the animation is told how long the clip is, and the block waits at
+the end until the voice has finished. The narration sits in the scene file next to the
+animation it describes, so there is no separate cue sheet to keep in sync.
+
+```python
+from manim import *
+from manim_voiceover import VoiceoverScene
+from manim_kit_voice import default_service, subcaptions_wanted
+
+class Derivative(VoiceoverScene):
+    def construct(self):
+        self.set_speech_service(default_service(), create_subcaption=subcaptions_wanted())
+        ax = Axes(); curve = ax.plot(lambda x: x**2)
+        with self.voiceover("The derivative measures how fast a function changes.") as t:
+            self.play(Create(ax), Create(curve), run_time=t.duration)
+        with self.voiceover("Watch the point <bookmark mark='go'/> slide along it.") as t:
+            self.wait_until_bookmark("go")
+            self.play(MoveAlongPath(dot, curve), run_time=t.get_remaining_duration())
+```
+
+Clips are cached under `media/voiceovers/` next to the scene and keyed by the text plus
+the voice settings, so re-rendering an unchanged line costs nothing and editing one
+re-synthesizes only that line. Bookmarks are placed by text position rather than by
+transcription: accurate to a fraction of a second, and no Whisper in the venv.
+
+### Voices
+
+A voice spec is `backend:voice[:lang]`. Two backends ship in this version:
+
+| Spec | Lang | Notes |
+|---|---|---|
+| `kokoro-v1:af_sarah` | en | **default** — even, unhurried |
+| `kokoro-v1:af_heart` | en | warmer, more expressive |
+| `kokoro-v1:af_sky` | en | lighter, younger |
+| `kokoro-v1:am_puck` | en | male |
+| `gemini-flash-tts:Puck` | en | best prosody, paid |
+| `gemini-flash-tts:Leda` | en | calm, paid |
+| `gemini-flash-tts:Aoede:de` | de | German female, paid |
+| `gemini-flash-tts:Charon:de` | de | German male, paid |
+
+`kokoro-v1` is the [Kokoro v1.0 ONNX](https://github.com/thewh1teagle/kokoro-onnx) model
+running locally on the CPU at about 0.4x real time — offline, free, Apache-2.0.
+`gemini-flash-tts` calls Gemini's `gemini-3.1-flash-tts-preview`: better prosody and the
+only German option here, at roughly $0.006 per two-sentence line ($1/1M input text tokens
+plus $20/1M audio output tokens). Piper, gTTS and edge-tts are deliberately out — see
+[NARRATION-DESIGN.md](NARRATION-DESIGN.md) for the licence reasoning.
+
+Selection order: `--voice SPEC`, then `$MANIM_KIT_VOICE`, then the `default` in
+`voice.json`. That file is committed and the repo is synced, so the default is fleet-wide;
+it also carries the curated voice list and the Kokoro model manifest (URL, SHA-256, size).
+
+`manim-kit voice setup` downloads the two Kokoro files (354 MB) into
+`~/.cache/manim-kit/voices/` and verifies their SHA-256, the same way music tracks are
+fetched. Nothing but text is committed.
+
+The Gemini backend needs an API key. It is looked up in `$GEMINI_API_KEY` or
+`$GOOGLE_API_KEY` first, then in the file named by `$MANIM_KIT_ENV_FILE`, and finally in
+`~/Synced/repos/tools/.env` if that exists — a convenience for this fleet, since the scene
+process runs from the scene's directory, which usually has no `.env` of its own.
+
+### Music under a voice
+
+A narrated render already has an audio track, so the music is mixed into it instead of
+replacing it: the bed plays at `volume=0.12` and a `sidechaincompress` keyed on the voice
+dips it about 8 dB while someone speaks and lets it back up in the pauses — threshold
+0.03, ratio 8, attack 20 ms, release 500 ms. `--no-ducking` keeps the bed flat. A silent
+render is mixed exactly as before, and the video stream is still copied, never re-encoded.
+
+`--srt` writes a subtitle file next to the MP4.
 
 ## Claude Code skill
 
