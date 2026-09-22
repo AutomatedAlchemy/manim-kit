@@ -5,6 +5,8 @@ point `manim_kit.py`; manim lives in the tool-owned `.venv/` (gitignored) that
 `manim-kit setup` creates from `requirements-manim.txt`. `requirements.txt`
 holds only the host-side `cli-tools-kit` pin for `--install`/`--remove`.
 
+Install, autostart and alias follow the cli-tools-kit contract: [PROTOCOL.md](../cli-tools-kit/PROTOCOL.md).
+
 ## Layout
 
 - `manim_kit.py` — everything: advertise guard (top, before any non-stdlib
