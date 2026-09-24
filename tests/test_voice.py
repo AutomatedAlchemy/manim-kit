@@ -45,6 +45,19 @@ def test_resolve_spec_order(monkeypatch):
     assert v.resolve_spec("gemini-flash-tts:Leda") == "gemini-flash-tts:Leda"  # argument wins
 
 
+def test_bare_language_code_picks_the_language_default(monkeypatch):
+    monkeypatch.delenv("MANIM_KIT_VOICE", raising=False)
+    assert v.resolve_spec("de") == "gemini-flash-tts:Kore:de"
+    monkeypatch.setenv("MANIM_KIT_VOICE", "de")
+    assert v.resolve_spec() == "gemini-flash-tts:Kore:de"
+
+
+def test_language_defaults_are_curated():
+    langs = {x["spec"]: x["lang"] for x in v.curated_voices()}
+    for lang, spec in v.voice_manifest()["language_defaults"].items():
+        assert langs.get(spec) == lang
+
+
 def test_kokoro_lang_mapping():
     assert v._kokoro_lang(None) == "en-us"
     assert v._kokoro_lang("en") == "en-us"

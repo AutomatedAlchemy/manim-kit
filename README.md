@@ -124,13 +124,14 @@ A voice spec is `backend:voice[:lang]`. Two backends ship in this version:
 
 | Spec | Lang | Notes |
 |---|---|---|
-| `kokoro-v1:af_sarah` | en | **default** — even, unhurried |
-| `kokoro-v1:af_heart` | en | warmer, more expressive |
+| `kokoro-v1:af_heart` | en | **default** (`--voice en`) — warm, a little expressive |
+| `kokoro-v1:af_sarah` | en | even, unhurried |
 | `kokoro-v1:af_sky` | en | lighter, younger |
 | `kokoro-v1:am_puck` | en | male |
 | `gemini-flash-tts:Puck` | en | best prosody, paid |
 | `gemini-flash-tts:Leda` | en | calm, paid |
-| `gemini-flash-tts:Aoede:de` | de | German female, paid |
+| `gemini-flash-tts:Kore:de` | de | **German default** (`--voice de`), firm and clear, paid |
+| `gemini-flash-tts:Aoede:de` | de | German female, softer, paid |
 | `gemini-flash-tts:Charon:de` | de | German male, paid |
 
 `kokoro-v1` is the [Kokoro v1.0 ONNX](https://github.com/thewh1teagle/kokoro-onnx) model
@@ -141,8 +142,11 @@ plus $20/1M audio output tokens). Piper, gTTS and edge-tts are deliberately out 
 [NARRATION-DESIGN.md](NARRATION-DESIGN.md) for the licence reasoning.
 
 Selection order: `--voice SPEC`, then `$MANIM_KIT_VOICE`, then the `default` in
-`voice.json`. That file is committed and the repo is synced, so the default is fleet-wide;
-it also carries the curated voice list and the Kokoro model manifest (URL, SHA-256, size).
+`voice.json`. A bare language code in either place (`--voice de`) picks that language's
+entry in `language_defaults`: English is `kokoro-v1:af_heart`, German is
+`gemini-flash-tts:Kore:de`. That file is committed
+and the repo is synced, so the default is fleet-wide; it also carries the curated voice
+list and the Kokoro model manifest (URL, SHA-256, size).
 
 `manim-kit voice setup` downloads the two Kokoro files (354 MB) into
 `~/.cache/manim-kit/voices/` and verifies their SHA-256, the same way music tracks are

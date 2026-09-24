@@ -44,7 +44,7 @@ ENV_FILE_VAR = "MANIM_KIT_ENV_FILE"
 FLEET_ENV_FILE = os.path.join(os.path.expanduser("~"), "Synced", "repos", "tools", ".env")
 GEMINI_KEY_NAMES = ("GEMINI_API_KEY", "GOOGLE_API_KEY")
 
-FALLBACK_DEFAULT_SPEC = f"{KOKORO_BACKEND}:af_sarah"
+FALLBACK_DEFAULT_SPEC = f"{KOKORO_BACKEND}:af_heart"
 
 
 # --- voice.json --------------------------------------------------------------------
@@ -65,6 +65,11 @@ def curated_voices() -> List[Dict[str, str]]:
 def manifest_default() -> str:
     """The fleet-wide default spec from voice.json."""
     return str(voice_manifest().get("default") or FALLBACK_DEFAULT_SPEC)
+
+
+def language_default(lang: str) -> Optional[str]:
+    """The spec voice.json names for a bare language code such as ``de``."""
+    return voice_manifest().get("language_defaults", {}).get(lang.strip().lower())
 
 
 def kokoro_files() -> List[Dict[str, Any]]:
@@ -111,8 +116,12 @@ def parse_spec(spec: str) -> Tuple[str, str, Optional[str]]:
 
 
 def resolve_spec(spec: Optional[str] = None) -> str:
-    """The spec to use: the argument, else $MANIM_KIT_VOICE, else voice.json."""
-    return spec or os.environ.get("MANIM_KIT_VOICE") or manifest_default()
+    """The spec to use: the argument, else $MANIM_KIT_VOICE, else voice.json.
+
+    A bare language code (``de``) stands for that language's default voice.
+    """
+    chosen = spec or os.environ.get("MANIM_KIT_VOICE") or manifest_default()
+    return language_default(chosen) or chosen
 
 
 # --- Gemini key lookup -------------------------------------------------------------
@@ -231,7 +240,7 @@ def _kokoro_service_class() -> type:
         and a cached render never touches the 325 MB model.
         """
 
-        def __init__(self, voice: str = "af_sarah", lang: str = "en-us",
+        def __init__(self, voice: str = "af_heart", lang: str = "en-us",
                      speed: float = 1.0, model_path: Optional[str] = None,
                      voices_path: Optional[str] = None, **kwargs: Any) -> None:
             self.voice = voice

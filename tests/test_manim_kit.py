@@ -255,6 +255,11 @@ def test_voice_default_prefers_the_environment(monkeypatch):
     assert mk.voice_default() == "kokoro-v1:af_sky"
 
 
+def test_expand_spec_maps_a_language_code():
+    assert mk.expand_spec("de") == "gemini-flash-tts:Kore:de"
+    assert mk.expand_spec("kokoro-v1:af_sky") == "kokoro-v1:af_sky"
+
+
 @pytest.mark.parametrize("spec,ok", [
     ("kokoro-v1:af_sarah", True),
     ("gemini-flash-tts:Aoede:de", True),

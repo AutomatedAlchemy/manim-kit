@@ -170,13 +170,14 @@ default marked and says which backend works on this host.
 
 | Spec | Lang | |
 |---|---|---|
-| `kokoro-v1:af_sarah` | en | **the default** — even, unhurried, good for maths |
-| `kokoro-v1:af_heart` | en | warmer, a little more expressive |
+| `kokoro-v1:af_heart` | en | **the default** (`--voice en`) — warm, a little expressive |
+| `kokoro-v1:af_sarah` | en | even, unhurried, good for maths |
 | `kokoro-v1:af_sky` | en | lighter, younger |
 | `kokoro-v1:am_puck` | en | male, the clearest of the Kokoro male voices |
 | `gemini-flash-tts:Puck` | en | male, best prosody — paid API |
 | `gemini-flash-tts:Leda` | en | calm female, good for a long explainer — paid API |
-| `gemini-flash-tts:Aoede:de` | de | German female — paid API |
+| `gemini-flash-tts:Kore:de` | de | **German default** (`--voice de`), firm and clear — paid API |
+| `gemini-flash-tts:Aoede:de` | de | German female, softer — paid API |
 | `gemini-flash-tts:Charon:de` | de | German male — paid API |
 
 `kokoro-v1` runs offline on the CPU at roughly 0.4x real time (10 minutes of narration
@@ -699,7 +700,13 @@ def voice_default() -> str:
     from_env = os.environ.get("MANIM_KIT_VOICE")
     if from_env:
         return from_env
-    return str(voice_manifest().get("default") or "kokoro-v1:af_sarah")
+    return str(voice_manifest().get("default") or "kokoro-v1:af_heart")
+
+
+def expand_spec(spec: str) -> str:
+    """A bare language code (``de``) becomes that language's default spec."""
+    table = voice_manifest().get("language_defaults", {})
+    return str(table.get(spec.strip().lower(), spec))  # type: ignore[union-attr]
 
 
 def curated_voices() -> List[Dict[str, str]]:
@@ -965,11 +972,11 @@ def cmd_render(args: argparse.Namespace) -> int:
     env = dict(os.environ)
     existing = env.get("PYTHONPATH")
     env["PYTHONPATH"] = SCRIPT_DIR + (os.pathsep + existing if existing else "")
-    voice_spec = args.voice or env.get("MANIM_KIT_VOICE") or ""
+    voice_spec = expand_spec(args.voice or env.get("MANIM_KIT_VOICE") or "")
     if args.voice:
-        if not _valid_spec(args.voice):
+        if not _valid_spec(voice_spec):
             _fail(f"unknown voice spec {args.voice!r}; see: manim-kit voice list")
-        env["MANIM_KIT_VOICE"] = args.voice
+        env["MANIM_KIT_VOICE"] = voice_spec
     env["MANIM_KIT_SRT"] = "1" if args.srt else "0"
 
     if args.dry_run:
@@ -1081,7 +1088,8 @@ def cmd_voice(args: argparse.Namespace) -> int:
     action = args.action or "list"
 
     if action == "list":
-        default = voice_default()
+        default = expand_spec(voice_default())
+        lang_defaults = voice_manifest().get("language_defaults", {})
         usable = {r["backend"]: r for r in _voice_check() if r["backend"] != "note"}
         for entry in curated_voices():
             spec = str(entry["spec"])
@@ -1093,12 +1101,14 @@ def cmd_voice(args: argparse.Namespace) -> int:
                 mark = "usable"
             else:
                 mark = row["note"]
-            star = "*" if spec == default else " "
+            star = "*" if spec == default else ("+" if spec in lang_defaults.values() else " ")
             print(f" {star} {spec:<30} {entry['lang']:<3} {entry['note']}")
             print(f"{'':<36}[{mark}]")
         print(f"\nDefault: {default}"
               + ("  (from $MANIM_KIT_VOICE)" if os.environ.get("MANIM_KIT_VOICE") else
                  f"  (from {os.path.basename(VOICE_JSON)})"))
+        for lang, spec in lang_defaults.items():  # type: ignore[union-attr]
+            print(f"Default for {lang} (+): {spec}  (--voice {lang})")
         print("Override per render with: manim-kit render FILE.py --voice SPEC")
         return 0
 
@@ -1131,7 +1141,7 @@ def cmd_voice(args: argparse.Namespace) -> int:
         if not args.text:
             _fail("voice say needs some text")
         _require_manim()
-        spec = args.voice or voice_default()
+        spec = expand_spec(args.voice or voice_default())
         if not _valid_spec(spec):
             _fail(f"unknown voice spec {spec!r}; see: manim-kit voice list")
         backend, voice = spec.split(":")[0], spec.split(":")[1]
@@ -1274,7 +1284,7 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--music-gain", type=float, default=MUSIC_GAIN,
                    help=f"music volume, 1.0 = unchanged (default: {MUSIC_GAIN})")
     s.add_argument("--no-music-fade", action="store_true", help="no fade in/out on the music")
-    s.add_argument("--voice", help="narration voice, backend:voice[:lang] "
+    s.add_argument("--voice", help="narration voice, backend:voice[:lang] or a language code like 'de' "
                                    "(default: $MANIM_KIT_VOICE, else voice.json)")
     s.add_argument("--srt", action="store_true",
                    help="also write subtitles next to the video (narrated scenes only)")
@@ -1302,7 +1312,8 @@ def build_parser() -> argparse.ArgumentParser:
     )
     s.add_argument("action", nargs="?", choices=["list", "say", "setup"], default="list")
     s.add_argument("text", nargs="*", help="the text to speak (say)")
-    s.add_argument("--voice", help="spec to use (default: $MANIM_KIT_VOICE, else voice.json)")
+    s.add_argument("--voice", help="spec, or a language code such as 'de' for that language's "
+                                   "default (default: $MANIM_KIT_VOICE, else voice.json)")
     s.add_argument("--out", help="output file (default: voice-<backend>-<voice>.mp3 in cwd)")
     s.add_argument("--style", help="Gemini delivery instruction, e.g. 'Read this slowly'")
     s.add_argument("--open", action="store_true", help="open the clip when it is written")

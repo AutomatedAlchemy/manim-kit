@@ -52,8 +52,10 @@ gTTS and edge-tts stay out on licence grounds — `NARRATION-DESIGN.md` has the
 reasoning.
 
 - **Spec strings** are `backend:voice[:lang]`. Order: `--voice`, then
-  `$MANIM_KIT_VOICE`, then `voice.json`'s `default`. `render` exports the spec
-  as `MANIM_KIT_VOICE` and puts `SCRIPT_DIR` on the subprocess `PYTHONPATH`, so
+  `$MANIM_KIT_VOICE`, then `voice.json`'s `default`. A bare language code
+  (`de`) expands through `language_defaults` (English: `kokoro-v1:af_heart`,
+  German: `gemini-flash-tts:Kore:de`). `render` exports the spec as
+  `MANIM_KIT_VOICE` and puts `SCRIPT_DIR` on the subprocess `PYTHONPATH`, so
   `from manim_kit_voice import default_service` resolves from any scene
   directory.
 - **Bookmarks without Whisper.** manim-voiceover only builds a scene's bookmark

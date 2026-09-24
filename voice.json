@@ -14,9 +14,17 @@
     "NARRATION-DESIGN.md for the licence reasoning.",
     "",
     "Gemini billing: $1 per 1M input text tokens plus $20 per 1M audio output tokens,",
-    "about $0.006 for a two-sentence narration line."
+    "about $0.006 for a two-sentence narration line.",
+    "",
+    "language_defaults maps a bare language code to a spec, so `--voice de` or",
+    "MANIM_KIT_VOICE=de picks the German default. User decision 2026-09-24:",
+    "af_heart for English (it replaced af_sarah as the default), Kore for German."
   ],
-  "default": "kokoro-v1:af_sarah",
+  "default": "kokoro-v1:af_heart",
+  "language_defaults": {
+    "en": "kokoro-v1:af_heart",
+    "de": "gemini-flash-tts:Kore:de"
+  },
   "backends": {
     "kokoro-v1": {
       "label": "Kokoro v1.0 (kokoro-onnx)",
@@ -34,14 +42,14 @@
   },
   "voices": [
     {
-      "spec": "kokoro-v1:af_sarah",
-      "lang": "en",
-      "note": "Default. Even, unhurried American female voice - the one to explain maths with."
-    },
-    {
       "spec": "kokoro-v1:af_heart",
       "lang": "en",
-      "note": "Warmer American female voice, a little more expressive than af_sarah."
+      "note": "Default. Warm American female voice, a little more expressive than af_sarah."
+    },
+    {
+      "spec": "kokoro-v1:af_sarah",
+      "lang": "en",
+      "note": "Even, unhurried American female voice."
     },
     {
       "spec": "kokoro-v1:af_sky",
@@ -64,9 +72,14 @@
       "note": "Calm female voice, good for a long explainer."
     },
     {
+      "spec": "gemini-flash-tts:Kore:de",
+      "lang": "de",
+      "note": "German default. Firm, clear female voice. There is no offline German option in this version."
+    },
+    {
       "spec": "gemini-flash-tts:Aoede:de",
       "lang": "de",
-      "note": "German female voice. There is no offline German option in this version."
+      "note": "German female voice, softer than Kore."
     },
     {
       "spec": "gemini-flash-tts:Charon:de",
