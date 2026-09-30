@@ -313,13 +313,17 @@ def _gemini_service(voice: str, style: Optional[str] = None,
     ending up in the audio. The prefix is part of the text, so it is also part
     of the cache key: changing the style re-synthesizes.
     """
-    from manim_voiceover.services.gemini import GeminiService
-
+    # Export before the import: manim_voiceover.services.gemini runs
+    # load_dotenv(find_dotenv(usecwd=True)) at import time, which walks up from
+    # the scene directory and would otherwise put a stale key from ~/.env into
+    # the environment first (setdefault then keeps the stale one).
     if not _export_gemini_key():
         raise RuntimeError(
             "No Gemini API key. Set GEMINI_API_KEY, or point $MANIM_KIT_ENV_FILE at a "
             f".env that has it, or keep one in {FLEET_ENV_FILE}."
         )
+
+    from manim_voiceover.services.gemini import GeminiService
 
     service = GeminiService(voice=voice, model=model, **kwargs)
     return _wrap_gemini(service, style)
