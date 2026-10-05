@@ -309,7 +309,8 @@ def test_mux_command_with_voice_ducks_the_bed():
     assert "afade=t=in:st=0:d=2" in graph and "afade=t=out:st=28.000:d=2" in graph
     assert f"sidechaincompress=threshold={mk.DUCK_THRESHOLD:g}:ratio={mk.DUCK_RATIO:g}" in graph
     assert f"attack={mk.DUCK_ATTACK_MS:g}:release={mk.DUCK_RELEASE_MS:g}" in graph
-    assert "[0:a]asplit=2[vkey][vout]" in graph          # voice keys the compressor
+    assert "[0:a]apad=whole_dur=30.000[voice]" in graph  # voice lasts as long as the video
+    assert "[voice]asplit=2[vkey][vout]" in graph        # voice keys the compressor
     assert "amix=inputs=2:duration=first:normalize=0" in graph
     assert cmd[cmd.index("-map") + 1] == "0:v"
     assert "[mix]" in cmd
@@ -322,6 +323,7 @@ def test_mux_command_with_voice_and_no_ducking_is_a_flat_bed():
     graph = cmd[cmd.index("-filter_complex") + 1]
     assert "sidechaincompress" not in graph
     assert "asplit" not in graph
+    assert "[0:a]apad=whole_dur=30.000[voice]" in graph
     assert "volume=0.12" in graph
     assert "amix=inputs=2:duration=first:normalize=0" in graph   # both tracks still mixed
 

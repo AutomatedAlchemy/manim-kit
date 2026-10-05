@@ -76,7 +76,9 @@ reasoning.
   `sidechaincompress` keyed on a split of the voice (threshold 0.03, ratio 8,
   attack 20 ms, release 500 ms — about 10 dB measured), then
   `amix=inputs=2:duration=first:normalize=0`. `--no-ducking` drops the
-  compressor. A render with no audio stream takes exactly the old command, so
+  compressor. The voice is first padded with `apad=whole_dur=<video duration>`:
+  the narration ends with the last spoken line, and without the pad `-shortest`
+  cut a closing `self.wait()` off the video (fixed 2026-10-05). A render with no audio stream takes exactly the old command, so
   the "a good silent render never fails because of the music" guarantee stands.
 - **The Gemini key** is looked up in the environment, then `$MANIM_KIT_ENV_FILE`,
   then `~/Synced/repos/tools/.env` — the scene process runs in the scene's

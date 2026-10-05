@@ -640,19 +640,23 @@ def mux_command(video: str, track: str, out: str, duration: float,
         return head + ["-filter:a", ",".join(music_filters),
                        "-map", "0:v", "-map", "1:a"] + tail
 
-    steps = [f"[1:a]{','.join(music_filters)}[bed]"]
+    # The narration track ends with the last spoken line, while the video runs on
+    # through any closing wait. Padded with silence to the video's length, the mix
+    # no longer ends early and -shortest keeps the whole video.
+    steps = [f"[1:a]{','.join(music_filters)}[bed]",
+             f"[0:a]apad=whole_dur={duration:.3f}[voice]"]
     if duck:
         # The voice is split: one copy is the compressor's key, the other is
         # what the listener hears. sidechaincompress takes the bed first and
         # the key second.
-        steps.append("[0:a]asplit=2[vkey][vout]")
+        steps.append("[voice]asplit=2[vkey][vout]")
         steps.append(
             f"[bed][vkey]sidechaincompress=threshold={DUCK_THRESHOLD:g}:ratio={DUCK_RATIO:g}"
             f":attack={DUCK_ATTACK_MS:g}:release={DUCK_RELEASE_MS:g}[ducked]"
         )
         steps.append("[ducked][vout]amix=inputs=2:duration=first:normalize=0[mix]")
     else:
-        steps.append("[bed][0:a]amix=inputs=2:duration=first:normalize=0[mix]")
+        steps.append("[bed][voice]amix=inputs=2:duration=first:normalize=0[mix]")
     return head + ["-filter_complex", ";".join(steps),
                    "-map", "0:v", "-map", "[mix]"] + tail
 
