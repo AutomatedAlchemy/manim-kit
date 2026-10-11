@@ -441,11 +441,31 @@ def render_template(template: str, class_name: str) -> str:
         return f.read().replace("{{SCENE}}", class_name)
 
 
-def _media_outputs(scene_dir: str, stem: str, since: float) -> List[str]:
-    """Files under media/{videos,images}/<stem>/ modified at or after *since*."""
+def _media_dir_override(scene_dir: str, manim_args: Iterable[str]) -> Optional[str]:
+    """The ``--media_dir``/``--media_dir=...`` value from *manim_args*, or None.
+
+    Manim runs with scene_dir as its cwd (see cmd_render), so a relative value
+    resolves against scene_dir the same way. A later occurrence wins, matching
+    argparse. None means "not given" — callers then fall back to scene_dir/media.
+    """
+    value = None
+    manim_args = list(manim_args)
+    for i, a in enumerate(manim_args):
+        if a == "--media_dir" and i + 1 < len(manim_args):
+            value = manim_args[i + 1]
+        elif a.startswith("--media_dir="):
+            value = a.split("=", 1)[1]
+    if value is None:
+        return None
+    return value if os.path.isabs(value) else os.path.join(scene_dir, value)
+
+
+def _media_outputs(scene_dir: str, stem: str, since: float, media_dir: Optional[str] = None) -> List[str]:
+    """Files under <media_dir or scene_dir/media>/{videos,images}/<stem>/ modified at or after *since*."""
+    base = media_dir if media_dir is not None else os.path.join(scene_dir, "media")
     out: List[str] = []
     for kind in ("videos", "images"):
-        root = os.path.join(scene_dir, "media", kind, stem)
+        root = os.path.join(base, kind, stem)
         if not os.path.isdir(root):
             continue
         for dirpath, dirnames, names in os.walk(root):
@@ -460,8 +480,8 @@ def _media_outputs(scene_dir: str, stem: str, since: float) -> List[str]:
     return sorted(out)
 
 
-def _newest_output(scene_dir: str, stem: str) -> Optional[str]:
-    files = _media_outputs(scene_dir, stem, since=0)
+def _newest_output(scene_dir: str, stem: str, media_dir: Optional[str] = None) -> Optional[str]:
+    files = _media_outputs(scene_dir, stem, since=0, media_dir=media_dir)
     if not files:
         return None
     return max(files, key=os.path.getmtime)
@@ -1004,7 +1024,8 @@ def cmd_render(args: argparse.Namespace) -> int:
     proc = subprocess.run(cmd, cwd=scene_dir, env=env)
     if proc.returncode != 0:
         _fail(f"manim exited with {proc.returncode}", proc.returncode)
-    outputs = _media_outputs(scene_dir, stem, since=start)
+    media_dir = _media_dir_override(scene_dir, args.manim_args)
+    outputs = _media_outputs(scene_dir, stem, since=start, media_dir=media_dir)
     narrated = any(p.lower().endswith(".mp4") and has_audio_stream(p) for p in outputs)
     mixed = 0
     if want_music:
@@ -1171,13 +1192,14 @@ def cmd_open(args: argparse.Namespace) -> int:
     path = os.path.abspath(args.file)
     scene_dir = os.path.dirname(path)
     stem = os.path.splitext(os.path.basename(path))[0]
-    target = _newest_output(scene_dir, stem)
+    media_dir = _media_dir_override(scene_dir, args.manim_args)
+    target = _newest_output(scene_dir, stem, media_dir=media_dir)
     if args.scene and target is not None:
-        cands = [p for p in _media_outputs(scene_dir, stem, since=0)
+        cands = [p for p in _media_outputs(scene_dir, stem, since=0, media_dir=media_dir)
                  if os.path.splitext(os.path.basename(p))[0].startswith(args.scene)]
         target = max(cands, key=os.path.getmtime) if cands else None
     if target is None:
-        _fail(f"no renders found under {os.path.join(scene_dir, 'media')} for {stem}")
+        _fail(f"no renders found under {media_dir or os.path.join(scene_dir, 'media')} for {stem}")
     _info(f"opening {target}")
     _xdg_open(target)
     return 0

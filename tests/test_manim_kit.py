@@ -102,6 +102,30 @@ def test_render_dry_run_builds_manim_command(tmp_path, monkeypatch, capsys):
     assert cmd[-2:] == [str(f), "Only"]  # single scene auto-selected
 
 
+def test_media_dir_override_resolves_relative_to_scene_dir(tmp_path):
+    scene_dir = str(tmp_path)
+    assert mk._media_dir_override(scene_dir, []) is None
+    assert mk._media_dir_override(scene_dir, ["--media_dir", "out"]) == os.path.join(scene_dir, "out")
+    assert mk._media_dir_override(scene_dir, ["--media_dir=/abs/out"]) == "/abs/out"
+    # A later occurrence wins, matching argparse.
+    assert mk._media_dir_override(scene_dir, ["--media_dir", "a", "--media_dir", "b"]) == os.path.join(scene_dir, "b")
+
+
+def test_media_outputs_follows_media_dir_override(tmp_path):
+    scene_dir = tmp_path / "scene"
+    scene_dir.mkdir()
+    external = tmp_path / "external"
+    video_dir = external / "videos" / "probe" / "480p15"
+    video_dir.mkdir(parents=True)
+    mp4 = video_dir / "Probe.mp4"
+    mp4.write_bytes(b"fake")
+
+    assert mk._media_outputs(str(scene_dir), "probe", since=0) == []  # not under scene_dir/media
+    found = mk._media_outputs(str(scene_dir), "probe", since=0, media_dir=str(external))
+    assert found == [str(mp4)]
+    assert mk._newest_output(str(scene_dir), "probe", media_dir=str(external)) == str(mp4)
+
+
 def test_skill_install_uninstall_roundtrip(tmp_path, monkeypatch):
     skill_dir = tmp_path / "skills" / "manim-kit"
     monkeypatch.setattr(mk, "SKILL_DIR", str(skill_dir))
