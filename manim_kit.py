@@ -342,12 +342,28 @@ QUALITY = {
 }
 TEMPLATES = ("basic", "text", "graph", "threed", "narrated")
 APT_HINT = "sudo apt install libpango1.0-dev libcairo2-dev pkg-config"
+APT_LATEX_HINT = "sudo apt install texlive-latex-recommended texlive-latex-extra"
+# Files manim's default TexTemplate loads: \documentclass[preview]{standalone}, amsmath.
+DEFAULT_TEX_FILES = ("standalone.cls", "preview.sty", "amsmath.sty", "amssymb.sty")
 WINDOWS = os.name == "nt"
 WINGET_FFMPEG = "winget install Gyan.FFmpeg"
 WINGET_LATEX = "winget install MiKTeX.MiKTeX"
 
 
 # --- helpers -----------------------------------------------------------------------
+
+
+def _missing_tex_files() -> list[str]:
+    """Files of manim's default TeX template that kpsewhich cannot find.
+
+    Empty when there is no latex or no kpsewhich: the latex probe reports the first,
+    and without kpsewhich there is nothing reliable to ask.
+    """
+    kpsewhich = shutil.which("kpsewhich")
+    if not shutil.which("latex") or not kpsewhich:
+        return []
+    return [f for f in DEFAULT_TEX_FILES
+            if subprocess.run([kpsewhich, f], capture_output=True).returncode != 0]
 
 def _info(msg: str) -> None:
     print(f"  • {msg}")
@@ -884,6 +900,14 @@ def cmd_doctor(args: argparse.Namespace) -> int:
             _warn(note)
         else:
             _info(note)
+    # A `latex` binary alone is not enough: manim's default template is
+    # \documentclass[preview]{standalone} with amsmath, and texlive-latex-base lacks
+    # the first two. MiKTeX fetches packages on demand, so only TeX Live is checked.
+    missing_tex = [] if WINDOWS else _missing_tex_files()
+    if missing_tex:
+        problems += 1
+        _warn(f"LaTeX packages missing: {', '.join(missing_tex)} — Tex/MathTex fail "
+              f"with the default template. Run: {APT_LATEX_HINT}")
     # manimpango ships Windows wheels, so the Pango/Cairo header check is a
     # Linux-only concern.
     pkgconfig = None if WINDOWS else shutil.which("pkg-config")
