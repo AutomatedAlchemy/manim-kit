@@ -9,6 +9,23 @@ session can write and render animations for you.
 Built on the [cli-tools-kit](https://github.com/Probst1nator/cli-tools-kit)
 installer protocol (`--advertise`, `--install`, `--install-skill`).
 
+## Example
+
+[![A secant of y = x² turning into the tangent. Click for the video with sound.](docs/readme_demo.gif)](docs/readme_demo.mp4)
+
+The GIF is a silent 8-second excerpt. Click it for the full 46-second video with sound
+([docs/readme_demo.mp4](docs/readme_demo.mp4), 720p, 2.3 MB): a title intro, then the
+derivative of x² as the limit of a secant. The narration is Google Gemini TTS with the
+voice **Puck** (AI-generated). The music is "Cylinder Five" by Chris Zabriskie, licensed
+under CC BY 4.0, <https://chriszabriskie.com>.
+
+The scene is [examples/readme_demo.py](examples/readme_demo.py). To render it again you
+need a Gemini API key (see [Voices](#voices)):
+
+```bash
+manim-kit render examples/readme_demo.py ReadmeDemo -q m --voice gemini-flash-tts:Puck
+```
+
 ## Install
 
 ```bash
@@ -77,7 +94,8 @@ fails the silent render is left intact. Music is skipped automatically for `--la
 `--format png` and `--format gif` — no audio track.
 
 Tracks are fetched on first use into `~/.cache/manim-kit/music/` and checked against the
-SHA-256 in `music.json` — no audio is committed to this repo. The bundled set is six
+SHA-256 in `music.json`. The tracks are not committed; the only audio in this repo is
+the finished demo video in `docs/`. The bundled set is six
 [Chris Zabriskie](https://chriszabriskie.com) tracks (*Cylinders*, *The Black Hole*,
 *Reappear*) under **CC BY 4.0 / CC BY 3.0**, mirrored on archive.org. Each render with
 music prints the attribution line, which has to go into your video description;
@@ -150,7 +168,7 @@ list and the Kokoro model manifest (URL, SHA-256, size).
 
 `manim-kit voice setup` downloads the two Kokoro files (354 MB) into
 `~/.cache/manim-kit/voices/` and verifies their SHA-256, the same way music tracks are
-fetched. Nothing but text is committed.
+fetched. The model files are not committed.
 
 The Gemini backend needs an API key. It is looked up in `$GEMINI_API_KEY` or
 `$GOOGLE_API_KEY` first, then in the file named by `$MANIM_KIT_ENV_FILE`, and finally in

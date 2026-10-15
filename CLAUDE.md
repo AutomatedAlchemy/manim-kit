@@ -28,6 +28,12 @@ Install, autostart and alias follow the cli-tools-kit contract: [PROTOCOL.md](..
   mux (`mux_music`), not `Scene.add_sound`.
 - `templates/narrated.py` — the `VoiceoverScene` skeleton: two spoken blocks
   and one bookmark, wired to `default_service()`.
+- `examples/readme_demo.py` — the scene behind the README demo (intro, then the
+  derivative as the limit of a secant). Rendered at `-q m` with
+  `--voice gemini-flash-tts:Puck`.
+- `docs/` — the rendered demo: `readme_demo.mp4` (720p, voice and music) and
+  `readme_demo.gif` (silent 8 s excerpt shown in the README). The only binaries
+  in the repo.
 - `tests/` — `test_manim_kit.py` and `test_voice.py` (stdlib, always run) and
   `test_render.py` (real `-q l` renders, silent and narrated; each skips when
   its dependencies are absent).
