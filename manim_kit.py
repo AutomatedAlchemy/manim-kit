@@ -61,13 +61,13 @@ SKILL_FILE = os.path.join(SKILL_DIR, "SKILL.md")
 # then `manim-kit --install-skill` to refresh the on-disk copy.
 SKILL_MD_CONTENT = '''---
 name: manim-kit
-description: Write and render Manim Community (3Blue1Brown-style) math animations with the manim-kit CLI — scaffold a scene, list scenes, render at draft/final quality, open the result.
+description: Write and render Manim Community (3Blue1Brown-style) math animations, or animations of your own simulation or data output, with the manim-kit CLI — scaffold a scene, list scenes, render at draft/final quality, open the result.
 ---
 
 # manim-kit — Manim Community animations from the CLI
 
 Use this skill when the user wants a math/science animation, a 3Blue1Brown-style
-explainer clip, an animated plot, or asks to "manim" something. It wraps
+explainer clip, an animated plot, a video of simulation results, or asks to "manim" something. It wraps
 [Manim Community](https://docs.manim.community) (`pip install manim`), not ManimGL.
 
 ## Commands
@@ -76,7 +76,7 @@ explainer clip, an animated plot, or asks to "manim" something. It wraps
 |---|---|
 | One-time setup (creates `.venv` with manim, checks ffmpeg/LaTeX) | `manim-kit setup` |
 | Check the install | `manim-kit doctor` |
-| New scene file from a template | `manim-kit new NAME [--template basic\\|text\\|graph\\|threed\\|narrated] [--dir DIR]` |
+| New scene file from a template | `manim-kit new NAME [--template basic\\|text\\|graph\\|threed\\|narrated\\|sim] [--dir DIR]` |
 | List the Scene classes in a file | `manim-kit list FILE.py` |
 | Render (1080p60, the default) | `manim-kit render FILE.py [SceneName]` |
 | Draft render (480p15, seconds) | `manim-kit render FILE.py SceneName -q l` |
@@ -114,7 +114,9 @@ trimmed to the exact video length, faded in and out, at `volume=0.12` so a later
 voice-over sits on top (`--music-gain` to change it, `--no-music` to skip it). The video
 is not re-encoded, so it costs a second. First use downloads the track into
 `~/.cache/manim-kit/music/`; `manim-kit music fetch` does it ahead of time. `--track ID`
-picks another one, `manim-kit music add FILE` takes the user's own audio.
+picks another one, `manim-kit music add FILE` takes the user's own audio. Without a voice,
+0.12 is quiet; about 0.45 suits a music-only video. A track shorter than the video restarts
+audibly, so check its length with `ffprobe` in the cache directory.
 
 The bundled tracks are Chris Zabriskie, CC BY. **After a render with music the command
 prints a credit line — tell the user it has to go into the video description.** The actual
@@ -227,6 +229,64 @@ asks whether the video contains synthetic media, answer yes for the narration.
    line, so decide the wording first.
 6. Tell the user the music credit line, and if a Gemini voice was used, that it was paid.
 
+## Animating your own simulation or data
+
+Manim presents results; it should not compute them. Run the simulation first, save what it
+produced, then play the saved data back against a clock. `manim-kit new NAME --template sim`
+is a working example: a toy wave solver, two runs stacked and in sync, each with an image,
+a curve and a readout. Its `SIM_DATA=DIR` switch plays your own `.npz` files instead.
+
+1. **Simulate** in a separate script, in whatever environment the solver needs (numba, JAX,
+   compiled code). Save one `.npz` per run: snapshot times `t`, the snapshots (fields,
+   positions, states), scalar series logged at every step, and the times worth slowing down
+   for. Keep bulky output outside the repo and pass its location in an environment
+   variable; `render` hands the environment to the scene.
+2. **Adapt** in a numpy-only module next to the scene that answers "what does the screen show
+   at time t": an RGBA frame, the curve up to t, a number. The tool venv holds manim and its
+   dependencies only; do not install solver packages into it.
+3. **Animate** with one `ValueTracker` as the clock, moved with `rate_func=linear`, and let
+   every mobject read it through an updater or `always_redraw`. Never step the simulation in
+   an updater: the result would depend on the frame rate.
+
+Pick the representation by object count:
+- **Fields, images, thousands of particles:** paint an RGBA `uint8` array in numpy and swap it
+  into an `ImageMobject` from an updater (`m.pixel_array = run.frame(t)`). Paint sharp shapes
+  (particle discs, edges) at the final output size, 2x supersampled and scaled down; a coarse
+  field can stay at grid size and let the image resample it. Cache frames that are slow to paint.
+- **Tens to hundreds of objects** (bodies, agents, robots, graph nodes): `Dot`, `Line`, `Arrow`
+  moved by updaters to interpolated positions. They stay sharp at every quality.
+- **Scalars:** a growing curve, `always_redraw(lambda: VMobject().set_points_as_corners(ax.c2p(rows)))`,
+  and a `DecimalNumber` with an updater.
+
+Time and snapshots:
+- Map the clock piecewise onto each run's own time, e.g.
+  `np.interp(p, [0, 1, 2, 3], [0, t_a, t_b, t_end])` with slow motion from `t_a` to `t_b`.
+  Runs on different time scales then reach their events at the same moment.
+- The video sets the snapshot budget, and slow motion needs the solver to save more often
+  around the event. Data that changes in steps, such as cracks, holds the last snapshot
+  (`np.searchsorted`) and needs about 25 snapshots per second of screen time. A smooth field
+  can be blended linearly between snapshots and needs fewer, as long as a wave moves less
+  than a quarter wavelength from one to the next.
+- Compare runs side by side or stacked, in one frame and in sync, not one after another.
+  Lead with the footage and keep text short.
+
+Gotchas for data-driven scenes:
+- Render uncached (`config.disable_caching = True` in the file, or `-- --disable_caching`).
+  The cache hashes a truncated pixel array and can replay a stale clip after the data changed.
+- Assign a fresh array to `pixel_array` every time; `set_opacity` writes into it in place.
+  Before a fade, clear the updaters and give each image a copy of its array plus a matching
+  `orig_alpha_pixel_array` (the template's `freeze`).
+- An updater runs only on a mobject that is in the scene. `Create(group, lag_ratio=0.1)` adds
+  the group; a `LaggedStart` of `Create(child)` adds only the children.
+- `ax.c2p(xs, ys)` with arrays returns a 3 x n array. `ax.c2p(np.column_stack([xs, ys]))`
+  returns the n x 3 points `set_points_as_corners` needs.
+- A `Text` rebuilt every frame costs 30-70 ms. `DecimalNumber(0, mob_class=Text)` caches its
+  glyphs and needs no LaTeX.
+- Write each scene as a literal `class` statement; manim finds scenes by class name, and
+  classes made in a loop all share one.
+- Parallel renders of one file need separate `--media_dir`s, or they race on the text cache.
+- Check drafts from stills at several times: `ffmpeg -ss 5 -i OUT.mp4 -frames:v 1 f.png`.
+
 ## Manim CE cheat sheet (v0.19+)
 
 ```python
@@ -293,6 +353,7 @@ class Demo(Scene):                   # ThreeDScene for 3D, MovingCameraScene for
   only 8 units tall — `.scale_to_fit_height(6)` or `.to_edge` instead of guessing coordinates.
 - Long `self.wait()` at the end is cheap; a missing one cuts the last frame off.
 - Renders are deterministic and cached per scene: rerunning only re-renders changed sections.
+  Scenes that swap image data need caching off, see *Animating your own simulation or data*.
 '''
 
 METADATA = {
@@ -340,7 +401,7 @@ QUALITY = {
     "p": "1440p60",
     "k": "2160p60",
 }
-TEMPLATES = ("basic", "text", "graph", "threed", "narrated")
+TEMPLATES = ("basic", "text", "graph", "threed", "narrated", "sim")
 APT_HINT = "sudo apt install libpango1.0-dev libcairo2-dev pkg-config"
 APT_LATEX_HINT = "sudo apt install texlive-latex-recommended texlive-latex-extra"
 # Files manim's default TexTemplate loads: \documentclass[preview]{standalone}, amsmath.

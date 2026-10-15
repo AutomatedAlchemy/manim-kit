@@ -77,7 +77,10 @@ manim-kit voice setup                         # cache the local Kokoro model
 
 Templates: `basic` (shapes + transform), `text` (Text + MathTex highlight),
 `graph` (Axes, plot, ValueTracker dot), `threed` (surface + camera orbit),
-`narrated` (VoiceoverScene with two spoken blocks and a bookmark).
+`narrated` (VoiceoverScene with two spoken blocks and a bookmark),
+`sim` (plays back simulation snapshots: a toy wave solver, two runs stacked and in sync,
+each with an image, a curve and a readout; `SIM_DATA=DIR` plays your own `.npz` files).
+The skill's section *Animating your own simulation or data* explains the pattern.
 
 Quality presets: `l` 480p15 · `m` 720p30 · `h` 1080p60 · `p` 1440p60 · `k` 2160p60.
 Output goes to `media/videos/<file-stem>/<res>/<Scene>.mp4` next to the scene

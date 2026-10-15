@@ -28,6 +28,9 @@ Install, autostart and alias follow the cli-tools-kit contract: [PROTOCOL.md](..
   mux (`mux_music`), not `Scene.add_sound`.
 - `templates/narrated.py` — the `VoiceoverScene` skeleton: two spoken blocks
   and one bookmark, wired to `default_service()`.
+- `templates/sim.py` — plays back simulation snapshots: a toy wave solver inline,
+  `SIM_DATA=DIR` for real `.npz` runs. The skill section *Animating your own
+  simulation or data* is its manual; keep the two in step.
 - `examples/readme_demo.py` — the scene behind the README demo (intro, then the
   derivative as the limit of a secant). Rendered at `-q m` with
   `--voice gemini-flash-tts:Puck`.
