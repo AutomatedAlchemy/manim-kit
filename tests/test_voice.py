@@ -110,13 +110,17 @@ def test_subcaptions_are_off_unless_asked(monkeypatch):
 
 # --- Gemini key lookup -------------------------------------------------------------
 
-def test_gemini_key_prefers_the_environment(monkeypatch):
+def test_gemini_key_prefers_the_environment(tmp_path, monkeypatch):
+    monkeypatch.delenv("GEMINI_API_KEY_PAID", raising=False)
+    monkeypatch.setenv(v.ENV_FILE_VAR, str(tmp_path / "missing.env"))
+    monkeypatch.setattr(v, "FLEET_ENV_FILE", str(tmp_path / "also-missing"))
     monkeypatch.setenv("GEMINI_API_KEY", "from-env")
     assert v.gemini_key() == "from-env"
 
 
 def test_gemini_key_falls_back_to_an_env_file(tmp_path, monkeypatch):
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.delenv("GEMINI_API_KEY_PAID", raising=False)
     monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
     env_file = tmp_path / "tools.env"
     env_file.write_text(
@@ -129,8 +133,22 @@ def test_gemini_key_falls_back_to_an_env_file(tmp_path, monkeypatch):
     assert v.gemini_key() == "from-file"      # quotes stripped, comments skipped
 
 
+def test_gemini_key_prefers_a_paid_key_in_a_file_over_a_free_one_in_the_environment(
+        tmp_path, monkeypatch):
+    monkeypatch.setenv("GEMINI_API_KEY", "free-from-env")
+    monkeypatch.delenv("GEMINI_API_KEY_PAID", raising=False)
+    env_file = tmp_path / "tools.env"
+    env_file.write_text("GEMINI_API_KEY=free-from-file\nGEMINI_API_KEY_PAID=paid-from-file\n")
+    monkeypatch.setenv(v.ENV_FILE_VAR, str(env_file))
+    monkeypatch.setattr(v, "FLEET_ENV_FILE", str(tmp_path / "nothing-here"))
+    assert v.gemini_key() == "paid-from-file"
+    assert v._export_gemini_key()
+    assert os.environ["GEMINI_API_KEY"] == "paid-from-file"   # overwrites the free key
+
+
 def test_gemini_key_absent_is_none_not_an_error(tmp_path, monkeypatch):
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.delenv("GEMINI_API_KEY_PAID", raising=False)
     monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
     monkeypatch.setenv(v.ENV_FILE_VAR, str(tmp_path / "missing.env"))
     monkeypatch.setattr(v, "FLEET_ENV_FILE", str(tmp_path / "also-missing"))

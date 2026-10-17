@@ -173,8 +173,10 @@ list and the Kokoro model manifest (URL, SHA-256, size).
 `~/.cache/manim-kit/voices/` and verifies their SHA-256, the same way music tracks are
 fetched. The model files are not committed.
 
-The Gemini backend needs an API key. It is looked up in `$GEMINI_API_KEY` or
-`$GOOGLE_API_KEY` first, then in the file named by `$MANIM_KIT_ENV_FILE`, and finally in
+The Gemini backend needs an API key. The names are tried in the order
+`GEMINI_API_KEY_PAID`, `GEMINI_API_KEY`, `GOOGLE_API_KEY`, so a paid key wins over a
+free-tier one (the free tier allows 10 TTS requests a day). Each name is looked up in the
+environment first, then in the file named by `$MANIM_KIT_ENV_FILE`, and finally in
 `~/Synced/repos/tools/.env` if that exists — a convenience for this fleet, since the scene
 process runs from the scene's directory, which usually has no `.env` of its own.
 

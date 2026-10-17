@@ -42,7 +42,9 @@ GEMINI_MODEL = "gemini-3.1-flash-tts-preview"
 # rendered from any directory should still find it.
 ENV_FILE_VAR = "MANIM_KIT_ENV_FILE"
 FLEET_ENV_FILE = os.path.join(os.path.expanduser("~"), "Synced", "repos", "tools", ".env")
-GEMINI_KEY_NAMES = ("GEMINI_API_KEY", "GOOGLE_API_KEY")
+# The paid key comes first: the free tier allows 10 TTS requests per day, fewer
+# than one narrated scene needs (user, 2026-10-17).
+GEMINI_KEY_NAMES = ("GEMINI_API_KEY_PAID", "GEMINI_API_KEY", "GOOGLE_API_KEY")
 
 FALLBACK_DEFAULT_SPEC = f"{KOKORO_BACKEND}:af_heart"
 
@@ -148,20 +150,15 @@ def _read_env_file(path: str) -> Dict[str, str]:
 def gemini_key() -> Optional[str]:
     """The Gemini API key, or None. Never printed anywhere.
 
-    Looked up in the environment first, then in $MANIM_KIT_ENV_FILE, then in
-    ~/Synced/repos/tools/.env if that exists (a fleet convenience: the scene
-    process runs from the scene's directory, which usually has no .env).
+    Names in GEMINI_KEY_NAMES order, so a paid key anywhere beats a free one.
+    Each name is looked up in the environment first, then in $MANIM_KIT_ENV_FILE,
+    then in ~/Synced/repos/tools/.env if that exists (a fleet convenience: the
+    scene process runs from the scene's directory, which usually has no .env).
     """
+    files = [_read_env_file(p) for p in (os.environ.get(ENV_FILE_VAR), FLEET_ENV_FILE)
+             if p and os.path.isfile(p)]
     for name in GEMINI_KEY_NAMES:
-        value = os.environ.get(name)
-        if value:
-            return value
-    candidates = [os.environ.get(ENV_FILE_VAR), FLEET_ENV_FILE]
-    for path in candidates:
-        if not path or not os.path.isfile(path):
-            continue
-        values = _read_env_file(path)
-        for name in GEMINI_KEY_NAMES:
+        for values in [os.environ, *files]:
             if values.get(name):
                 return values[name]
     return None
@@ -172,7 +169,9 @@ def _export_gemini_key() -> bool:
     key = gemini_key()
     if not key:
         return False
-    os.environ.setdefault("GEMINI_API_KEY", key)
+    # Overwrite, not setdefault: a free key already in the environment must not
+    # shadow the paid one gemini_key() chose.
+    os.environ["GEMINI_API_KEY"] = key
     return True
 
 
@@ -316,10 +315,11 @@ def _gemini_service(voice: str, style: Optional[str] = None,
     # Export before the import: manim_voiceover.services.gemini runs
     # load_dotenv(find_dotenv(usecwd=True)) at import time, which walks up from
     # the scene directory and would otherwise put a stale key from ~/.env into
-    # the environment first (setdefault then keeps the stale one).
+    # the environment first (load_dotenv does not override a variable that is set).
     if not _export_gemini_key():
         raise RuntimeError(
-            "No Gemini API key. Set GEMINI_API_KEY, or point $MANIM_KIT_ENV_FILE at a "
+            "No Gemini API key. Set GEMINI_API_KEY_PAID or GEMINI_API_KEY, or point "
+            "$MANIM_KIT_ENV_FILE at a "
             f".env that has it, or keep one in {FLEET_ENV_FILE}."
         )
 
