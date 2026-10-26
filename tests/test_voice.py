@@ -324,6 +324,7 @@ def test_load_phonon_offline_and_uncached_does_not_call_ptts(fake_ptts, monkeypa
 
 
 def test_uncached_voice_offline_raises_instead_of_hanging(fake_ptts, monkeypatch):
+    pytest.importorskip("numpy")                   # phonon_synth needs it; the host Python may not
     monkeypatch.setattr(v, "_hub_reachable", lambda *a: False)
     tts = _FakeTTS("local", lang="en", quant="q8", voice_catalog="x")
     tts.voices = ["Harper"]
