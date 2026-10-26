@@ -15,12 +15,13 @@ Install, autostart and alias follow the cli-tools-kit contract: [PROTOCOL.md](..
 - `templates/*.py` — scene templates; `{{SCENE}}` is the class-name placeholder.
 - `manim_kit_voice.py` — narration backends, imported by a scene *inside the
   venv*. `parse_spec` and the `voice.json` readers are stdlib-only so the host
-  side can import them too; `KokoroService` and the Gemini wrapper are built
-  lazily inside functions. `python manim_kit_voice.py say|check` is how
+  side can import them too; `PhononService` and the Gemini wrapper are built
+  lazily inside functions. `python manim_kit_voice.py say|check|setup` is how
   `manim_kit.py` reaches it through `VENV_PYTHON`.
-- `voice.json` — voice manifest: the fleet-wide `default` spec, the eight
-  curated voices, and the Kokoro model files (url, sha256, bytes). Text only;
-  the 354 MB model is fetched to `~/.cache/manim-kit/voices/`, like music.
+- `voice.json` — voice manifest: the fleet-wide `default` spec, the curated
+  voices, and the `phonon` section (model, fallback model and voice catalog
+  pinned to Hub revisions, quant, voice names, Kokoro-name map). Text only; the
+  models and voice embeddings live in the Hugging Face cache.
 - `music.json` — background-music manifest for `render` (id, licence, credit,
   URL, sha256). Text only: MP3s are fetched to `~/.cache/manim-kit/music/`, never
   committed. Only licences that permit redistribution belong here — the real 3Blue1Brown
@@ -55,15 +56,36 @@ Install, autostart and alias follow the cli-tools-kit contract: [PROTOCOL.md](..
 ## Narration (added 2026-09-17)
 
 `VoiceoverScene` + manim-voiceover 0.4.0 pace the animation from the voice, not
-the other way round. Two backends only, by user decision: `kokoro-v1` (local
-CPU, the default) and `gemini-flash-tts` (paid API, the only German). Piper,
-gTTS and edge-tts stay out on licence grounds — `NARRATION-DESIGN.md` has the
-reasoning.
+the other way round. Two backends only, by user decision: `phonon` (local CPU,
+English and German, the default) and `gemini-flash-tts` (paid API). Kokoro was
+replaced by Phonon on 2026-10-26 (user: of the local engines only Phonon and
+Articulino stay fleet-wide). Piper, gTTS and edge-tts stay out on licence
+grounds — `NARRATION-DESIGN.md` has the reasoning.
+
+- **Licence split.** Phonon 40M multilingual output is CC BY-NC 4.0:
+  non-commercial only, credit "Phonon by Gradium, CC BY-NC 4.0" (`render`
+  prints it). When 40M cannot load, English falls back to Phonon 31M English
+  (Apache-2.0, same voice names) and German raises, naming the gemini backend.
+  Commercial work uses `gemini-flash-tts`. Keep this in the README, the skill
+  text and `voice.json` alike.
+- **No hang offline.** ptts ignores `HF_HUB_OFFLINE` and hangs on an hf://
+  model when the network does not answer. `load_phonon` loads from the local
+  snapshot path when the HF cache has one, and tries a download only after a
+  3 s TCP probe of the Hub (`HF_HUB_OFFLINE=1` counts as no answer). An
+  uncached voice embedding goes through the same probe. Same guard as
+  `tools/_shared/voice/phonon_tts.py`.
+- **Clip cache key** holds the pinned model string (never a path), catalog,
+  quant, language, voice and speed. A fresh clip is keyed by the model that
+  really spoke, so a 31M fallback clip is not served later as a 40M one.
+- **Old specs.** `kokoro-v1:<id>` maps through `voice.json` `phonon.kokoro`
+  (af_heart → Hadley), in both `manim_kit.expand_spec` and
+  `manim_kit_voice.migrate_spec`, with one note. `render` exports the mapped
+  spec so the scene process does not print the note again.
 
 - **Spec strings** are `backend:voice[:lang]`. Order: `--voice`, then
   `$MANIM_KIT_VOICE`, then `voice.json`'s `default`. A bare language code
-  (`de`) expands through `language_defaults` (English: `kokoro-v1:af_heart`,
-  German: `gemini-flash-tts:Kore:de`). `render` exports the spec as
+  (`de`) expands through `language_defaults` (English: `phonon:Harper`,
+  German: `phonon:Annika:de`). `render` exports the spec as
   `MANIM_KIT_VOICE` and puts `SCRIPT_DIR` on the subprocess `PYTHONPATH`, so
   `from manim_kit_voice import default_service` resolves from any scene
   directory.

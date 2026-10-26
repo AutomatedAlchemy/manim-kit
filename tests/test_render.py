@@ -69,18 +69,15 @@ def _duration(path):
 
 
 def _voice_ready():
-    """manim-voiceover importable in the venv and the Kokoro model cached."""
-    if mk._manim_version() is None or not mk.kokoro_cached():
+    """The venv reports the default backend (Phonon) usable: ptts and a model cached."""
+    if mk._manim_version() is None:
         return False
-    probe = subprocess.run(
-        [mk.VENV_PYTHON, "-c", "import manim_voiceover, kokoro_onnx"],
-        capture_output=True, timeout=120,
-    )
-    return probe.returncode == 0
+    backend = mk.expand_spec(mk.voice_default()).split(":")[0]
+    return any(r["backend"] == backend and r["usable"] == "usable" for r in mk._voice_check())
 
 
 @pytest.mark.skipif(not _voice_ready(),
-                    reason="manim-voiceover or the Kokoro model is missing "
+                    reason="manim-voiceover, ptts or a Phonon model is missing "
                            "(run: manim-kit setup && manim-kit voice setup)")
 @pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="ffmpeg not installed")
 def test_narrated_render_carries_voice_and_ducked_music(tmp_path):

@@ -264,54 +264,38 @@ def test_voice_manifest_default_is_curated():
         assert entry["lang"] and entry["note"]
 
 
-def test_kokoro_manifest_has_both_files():
-    files = mk.kokoro_manifest()
-    assert {str(e["name"]) for e in files} == {"kokoro-v1.0.onnx", "voices-v1.0.bin"}
-    for entry in files:
-        assert len(str(entry["sha256"])) == 64
-        assert str(entry["url"]).startswith("https://")
-
-
 def test_voice_default_prefers_the_environment(monkeypatch):
     monkeypatch.delenv("MANIM_KIT_VOICE", raising=False)
     assert mk.voice_default() == mk.voice_manifest()["default"]
-    monkeypatch.setenv("MANIM_KIT_VOICE", "kokoro-v1:af_sky")
-    assert mk.voice_default() == "kokoro-v1:af_sky"
+    monkeypatch.setenv("MANIM_KIT_VOICE", "phonon:Trevor")
+    assert mk.voice_default() == "phonon:Trevor"
 
 
 def test_expand_spec_maps_a_language_code():
-    assert mk.expand_spec("de") == "gemini-flash-tts:Kore:de"
-    assert mk.expand_spec("kokoro-v1:af_sky") == "kokoro-v1:af_sky"
+    assert mk.expand_spec("de") == "phonon:Annika:de"
+    assert mk.expand_spec("en") == "phonon:Harper"
+    assert mk.expand_spec("phonon:Trevor") == "phonon:Trevor"
+
+
+def test_expand_spec_maps_an_old_kokoro_spec():
+    assert mk.expand_spec("kokoro-v1:af_heart") == "phonon:Hadley"
+    assert mk.expand_spec("kokoro-v1:bm_george") == "phonon:Edwin"
+    assert not mk._valid_spec(mk.expand_spec("kokoro-v1:no_such_voice"))
 
 
 @pytest.mark.parametrize("spec,ok", [
-    ("kokoro-v1:af_sarah", True),
+    ("phonon:Harper", True),
+    ("phonon:Annika:de", True),
     ("gemini-flash-tts:Aoede:de", True),
     ("piper:thorsten", False),
-    ("kokoro-v1", False),
-    ("kokoro-v1:", False),
+    ("phonon", False),
+    ("phonon:", False),
+    ("phonon:Nobody", False),
+    ("phonon:Harper:fr", False),
+    ("kokoro-v1:af_sarah", False),   # only valid after expand_spec
 ])
 def test_valid_spec(spec, ok):
     assert mk._valid_spec(spec) is ok
-
-
-def test_fetch_voice_file_verifies_and_is_idempotent(tmp_path, monkeypatch):
-    import hashlib
-    src = tmp_path / "model.onnx"
-    src.write_bytes(b"pretend this is 325 MB of ONNX")
-    monkeypatch.setattr(mk, "VOICE_DIR", str(tmp_path / "cache"))
-    entry = {"name": "model.onnx", "url": src.as_uri(), "bytes": len(src.read_bytes()),
-             "sha256": hashlib.sha256(src.read_bytes()).hexdigest()}
-
-    path = mk.fetch_voice_file(entry)
-    assert os.path.isfile(path)
-    mtime = os.path.getmtime(path)
-    assert mk.fetch_voice_file(entry) == path and os.path.getmtime(path) == mtime
-
-    bad = {**entry, "name": "bad.onnx", "sha256": "0" * 64}
-    with pytest.raises(RuntimeError, match="checksum mismatch"):
-        mk.fetch_voice_file(bad)
-    assert not list((tmp_path / "cache").glob("bad*"))   # nothing half-written left
 
 
 # --- mux with and without a voice track --------------------------------------------
@@ -361,7 +345,7 @@ def test_render_dry_run_reports_the_voice_environment(tmp_path, monkeypatch, cap
     assert mk.main(["render", str(f), "--dry-run", "--voice", "kokoro-v1:af_heart", "--srt"]) == 0
     out = capsys.readouterr().out
 
-    assert "MANIM_KIT_VOICE=kokoro-v1:af_heart" in out
+    assert "MANIM_KIT_VOICE=phonon:Hadley" in out   # an old spec is exported already mapped
     assert "MANIM_KIT_SRT=1" in out
     assert f"PYTHONPATH={mk.SCRIPT_DIR}" in out    # so `import manim_kit_voice` resolves
     assert "sidechaincompress" in out             # a narrated render ducks the bed
@@ -372,7 +356,7 @@ def test_render_dry_run_no_ducking(tmp_path, monkeypatch, capsys):
     f.write_text("from manim import *\nclass Only(VoiceoverScene): pass\n")
     monkeypatch.setattr(mk, "_manim_version", lambda: "0.0-test")
     monkeypatch.setattr(mk, "resolve_track", lambda tid: ("/tmp/t.mp3", "Credit line"))
-    assert mk.main(["render", str(f), "--dry-run", "--voice", "kokoro-v1:af_sarah",
+    assert mk.main(["render", str(f), "--dry-run", "--voice", "phonon:Harper",
                     "--no-ducking"]) == 0
     out = capsys.readouterr().out
     assert "sidechaincompress" not in out

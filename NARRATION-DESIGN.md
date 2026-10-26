@@ -1,6 +1,13 @@
 # manim-kit narration — design
 
 > **Implemented 2026-09-17: Kokoro + Gemini; Piper deferred.**
+>
+> **2026-10-26: Kokoro replaced by Phonon** (user decision: of the local engines only
+> Phonon and Articulino stay fleet-wide). The local backend is now `phonon`, gradium's
+> Phonon 40M multilingual through `ptts`, English and German (Harper, Annika). Its output
+> is CC BY-NC 4.0, non-commercial only, credit "Phonon by Gradium, CC BY-NC 4.0". English
+> falls back to Phonon 31M English (Apache-2.0) when 40M cannot load; German then fails.
+> Commercial work uses `gemini-flash-tts`. The Kokoro rows below are the 2026-09 record.
 
 Goal: `manim-kit render lecture.py` produces a finished explainer: the animation, a
 synthesized voice reading the narration in sync with what is on screen, and the ambient

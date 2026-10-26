@@ -3,7 +3,7 @@
 manim>=0.19,<1.0
 
 # Narration (manim-kit voice / --voice). manim-voiceover drives the timing,
-# kokoro-onnx runs the local voice, soundfile writes its WAV.
+# ptts runs the local Phonon voice (needs only numpy), soundfile writes its WAV.
 manim-voiceover[gemini]>=0.4,<0.5
-kokoro-onnx>=0.4,<0.5
+ptts==0.4.1
 soundfile

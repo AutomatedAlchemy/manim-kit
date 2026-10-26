@@ -2,9 +2,16 @@
 """Narration voices for manim-kit scenes.
 
 A scene imports :func:`default_service` from here and hands the result to
-``VoiceoverScene.set_speech_service``. Two backends: ``kokoro-v1`` runs the
-Kokoro v1.0 ONNX model on the CPU with no network, ``gemini-flash-tts`` calls
-the Gemini API through manim-voiceover's own ``GeminiService``.
+``VoiceoverScene.set_speech_service``. Two backends: ``phonon`` runs gradium's
+Phonon 40M multilingual model (``ptts``) on the CPU with no network, English and
+German; ``gemini-flash-tts`` calls the Gemini API through manim-voiceover's own
+``GeminiService``.
+
+Licences: Phonon 40M output is CC BY-NC 4.0, non-commercial only, and needs the
+credit "Phonon by Gradium, CC BY-NC 4.0". When 40M cannot load, English falls
+back to Phonon 31M English (Apache-2.0, same voice names) and German fails.
+Commercial work uses the gemini backend. Old ``kokoro-v1:<id>`` specs map to a
+Phonon voice through ``voice.json``'s ``phonon.kokoro`` table.
 
 This module runs inside the tool venv, next to manim-voiceover. The top half
 (:func:`parse_spec`, the ``voice.json`` readers) is stdlib-only on purpose so
@@ -13,8 +20,9 @@ that needs manim-voiceover is built inside a function.
 
 Run it directly through the venv interpreter for a quick audition:
 
-    .venv/bin/python manim_kit_voice.py say "Some text" --voice kokoro-v1:af_sarah
+    .venv/bin/python manim_kit_voice.py say "Some text" --voice phonon:Harper
     .venv/bin/python manim_kit_voice.py check
+    .venv/bin/python manim_kit_voice.py setup     # download the models and default voices
 """
 
 from __future__ import annotations
@@ -26,15 +34,16 @@ from typing import Any, Dict, List, Optional, Tuple
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 VOICE_JSON = os.path.join(SCRIPT_DIR, "voice.json")
-VOICE_CACHE_DIR = os.path.join(os.path.expanduser("~"), ".cache", "manim-kit", "voices")
 
-KOKORO_BACKEND = "kokoro-v1"
+PHONON_BACKEND = "phonon"
 GEMINI_BACKEND = "gemini-flash-tts"
-BACKENDS = (KOKORO_BACKEND, GEMINI_BACKEND)
-
-KOKORO_MODEL_FILE = "kokoro-v1.0.onnx"
-KOKORO_VOICES_FILE = "voices-v1.0.bin"
-KOKORO_SAMPLE_RATE = 24000
+BACKENDS = (PHONON_BACKEND, GEMINI_BACKEND)
+# Specs of the removed Kokoro backend (2026-10-26) are rewritten to Phonon voices.
+LEGACY_KOKORO_BACKEND = "kokoro-v1"
+PHONON_LANGS = ("en", "de")
+PHONON_DEFAULT_VOICES = {"en": "Harper", "de": "Annika"}
+PHONON_CREDIT = "Phonon by Gradium, CC BY-NC 4.0"
+HUB_TIMEOUT_S = 3.0
 GEMINI_MODEL = "gemini-3.1-flash-tts-preview"
 
 # Where the Gemini key is looked up, in order. The last entry is a convenience
@@ -46,7 +55,7 @@ FLEET_ENV_FILE = os.path.join(os.path.expanduser("~"), "Synced", "repos", "tools
 # than one narrated scene needs (user, 2026-10-17).
 GEMINI_KEY_NAMES = ("GEMINI_API_KEY_PAID", "GEMINI_API_KEY", "GOOGLE_API_KEY")
 
-FALLBACK_DEFAULT_SPEC = f"{KOKORO_BACKEND}:af_heart"
+FALLBACK_DEFAULT_SPEC = f"{PHONON_BACKEND}:Harper"
 
 
 # --- voice.json --------------------------------------------------------------------
@@ -74,37 +83,63 @@ def language_default(lang: str) -> Optional[str]:
     return voice_manifest().get("language_defaults", {}).get(lang.strip().lower())
 
 
-def kokoro_files() -> List[Dict[str, Any]]:
-    """The Kokoro model file manifest (name, url, sha256, bytes)."""
-    return list(voice_manifest().get("kokoro_model", {}).get("files", []))
+def phonon_pins() -> Dict[str, Any]:
+    """voice.json's phonon section: model pins, catalog, quant, voices, Kokoro map."""
+    return dict(voice_manifest().get("phonon", {}))
 
 
-def kokoro_paths() -> Tuple[str, str]:
-    """(model path, voices path) in the cache directory. Neither need exist."""
-    return (os.path.join(VOICE_CACHE_DIR, KOKORO_MODEL_FILE),
-            os.path.join(VOICE_CACHE_DIR, KOKORO_VOICES_FILE))
-
-
-def kokoro_cached() -> bool:
-    """True when both Kokoro files are present. Size is not re-verified here."""
-    return all(os.path.isfile(p) for p in kokoro_paths())
+def phonon_voices(lang: str) -> List[str]:
+    """The Phonon voice names voice.json lists for *lang* (``en`` or ``de``)."""
+    key = "voices_de" if lang == "de" else "voices"
+    return list(phonon_pins().get(key, {}))
 
 
 # --- spec strings ------------------------------------------------------------------
 
+_legacy_noted: set = set()
+
+
+def migrate_spec(spec: str) -> str:
+    """Rewrite an old ``kokoro-v1:<id>`` spec to its Phonon voice; others pass unchanged.
+
+    The Kokoro backend was removed on 2026-10-26. voice.json's ``phonon.kokoro``
+    table maps each Kokoro voice to the Phonon voice of the same accent and
+    gender (af_heart -> Hadley). A note goes to stderr once per spec and process.
+    A Kokoro name without an entry is an error, not a silent default.
+    """
+    if not isinstance(spec, str):
+        return spec
+    parts = spec.strip().split(":")
+    if len(parts) < 2 or parts[0].strip() != LEGACY_KOKORO_BACKEND:
+        return spec
+    kokoro = parts[1].strip()
+    voice = phonon_pins().get("kokoro", {}).get(kokoro)
+    if not voice:
+        raise ValueError(f"{spec!r}: the kokoro-v1 backend was removed and {kokoro!r} has no "
+                         "Phonon equivalent; pick a voice from: manim-kit voice list")
+    new = f"{PHONON_BACKEND}:{voice}"
+    if spec not in _legacy_noted:
+        _legacy_noted.add(spec)
+        print(f"note: kokoro-v1 was removed; {spec.strip()} now speaks as {new}", file=sys.stderr)
+    return new
+
+
 def parse_spec(spec: str) -> Tuple[str, str, Optional[str]]:
     """Split ``"backend:voice[:lang]"`` into its three parts.
 
-    >>> parse_spec("kokoro-v1:af_sarah")
-    ('kokoro-v1', 'af_sarah', None)
+    >>> parse_spec("phonon:Harper")
+    ('phonon', 'Harper', None)
     >>> parse_spec("gemini-flash-tts:Aoede:de")
     ('gemini-flash-tts', 'Aoede', 'de')
 
-    Raises ValueError on an unknown backend or a missing voice name, so a typo
-    in ``--voice`` fails before manim starts rather than mid-render.
+    An old ``kokoro-v1:<id>`` spec is rewritten first (see :func:`migrate_spec`).
+    Raises ValueError on an unknown backend, a missing voice name, or a Phonon
+    voice or language voice.json does not list, so a typo in ``--voice`` fails
+    before manim starts rather than mid-render.
     """
     if not isinstance(spec, str) or not spec.strip():
         raise ValueError("empty voice spec; expected backend:voice[:lang]")
+    spec = migrate_spec(spec)
     parts = spec.strip().split(":")
     if len(parts) < 2 or len(parts) > 3:
         raise ValueError(f"bad voice spec {spec!r}; expected backend:voice[:lang]")
@@ -114,7 +149,21 @@ def parse_spec(spec: str) -> Tuple[str, str, Optional[str]]:
         raise ValueError(f"unknown voice backend {backend!r}; have: {', '.join(BACKENDS)}")
     if not voice:
         raise ValueError(f"bad voice spec {spec!r}: no voice name")
+    if backend == PHONON_BACKEND:
+        if lang is not None and lang not in PHONON_LANGS:
+            raise ValueError(f"phonon speaks {', '.join(PHONON_LANGS)}, not {lang!r}; "
+                             f"for other languages use {GEMINI_BACKEND}")
+        known = phonon_voices("en") + phonon_voices("de")
+        if known and voice not in known:
+            raise ValueError(f"unknown Phonon voice {voice!r}; have: {', '.join(known)}")
     return backend, voice, lang
+
+
+def phonon_lang(voice: str, lang: Optional[str] = None) -> str:
+    """The language a Phonon spec speaks: its ``:lang`` part, else the voice's own."""
+    if lang:
+        return lang
+    return "de" if voice in phonon_voices("de") else "en"
 
 
 def resolve_spec(spec: Optional[str] = None) -> str:
@@ -123,7 +172,7 @@ def resolve_spec(spec: Optional[str] = None) -> str:
     A bare language code (``de``) stands for that language's default voice.
     """
     chosen = spec or os.environ.get("MANIM_KIT_VOICE") or manifest_default()
-    return language_default(chosen) or chosen
+    return migrate_spec(language_default(chosen) or chosen)
 
 
 # --- Gemini key lookup -------------------------------------------------------------
@@ -223,53 +272,214 @@ def with_word_boundaries(data: Dict[str, Any], text: str, cache_dir: Any) -> Dic
     return filled
 
 
-# --- Kokoro speech service ---------------------------------------------------------
+# --- Phonon models -----------------------------------------------------------------
+#
+# ptts ignores HF_HUB_OFFLINE, and handed an hf:// model on a network that does not
+# answer it hangs for minutes. So a model is loaded from its local snapshot when the
+# Hugging Face cache has one, and a download is only tried after a 3 s TCP probe of
+# the Hub succeeds. The same guard covers voice embeddings that are not cached yet.
+# (Copied from tools/_shared/voice/phonon_tts.py.)
 
-def _kokoro_service_class() -> type:
-    """Build KokoroService lazily; defining it needs manim-voiceover imported."""
+_phonon_loaded: Dict[str, Tuple[Any, str]] = {}   # lang -> (ptts.TTS, pinned model it loaded)
+_hub_answer: Optional[bool] = None
+
+
+def _hf_snapshot(repo: str) -> str:
+    """Local snapshot folder of a pinned ``hf://owner/name@rev`` in the HF cache."""
+    name, _, revision = repo[len("hf://"):].partition("@")
+    hub = os.environ.get("HF_HUB_CACHE") or os.path.join(
+        os.environ.get("HF_HOME", os.path.join(os.path.expanduser("~"), ".cache", "huggingface")),
+        "hub")
+    return os.path.join(hub, "models--" + name.replace("/", "--"), "snapshots", revision)
+
+
+def _snapshot_if_complete(repo: str) -> Optional[str]:
+    """The model's local snapshot when the files ptts loads are all there, else None."""
+    path = _hf_snapshot(repo)
+    quant = phonon_pins().get("quant", "q8")
+    files = ("config.json", f"model.{quant}.gguf", "tokenizer.json")
+    return path if all(os.path.exists(os.path.join(path, f)) for f in files) else None
+
+
+def _hub_reachable(timeout: float = HUB_TIMEOUT_S) -> bool:
+    """True if a TCP connection to the Hub (or the HTTPS proxy) opens. Asked once.
+
+    HF_HUB_OFFLINE=1 counts as no answer, since ptts itself does not honour it.
+    """
+    global _hub_answer
+    if os.environ.get("HF_HUB_OFFLINE", "") not in ("", "0"):
+        return False
+    if _hub_answer is None:
+        import socket
+        import urllib.parse
+        proxy = os.environ.get("HTTPS_PROXY") or os.environ.get("https_proxy")
+        if proxy:
+            url = urllib.parse.urlsplit(proxy if "://" in proxy else "http://" + proxy)
+            host, port = url.hostname, url.port or 80
+        else:
+            host, port = "huggingface.co", 443
+        try:
+            socket.create_connection((host, port), timeout=timeout).close()
+            _hub_answer = True
+        except OSError:
+            _hub_answer = False
+    return _hub_answer
+
+
+def phonon_models(lang: str) -> List[str]:
+    """Pinned models for *lang*, best first: 40M multilingual, then 31M English for English."""
+    pins = phonon_pins()
+    return [pins["model"], pins["model_en"]] if lang == "en" else [pins["model"]]
+
+
+def expected_phonon_model(lang: str) -> str:
+    """The pin a synthesis would load, judged from the local cache only.
+
+    Part of the clip cache key. It is a pin string, never a path, so the key does
+    not change with $HOME or the network.
+    """
+    models = phonon_models(lang)
+    return next((m for m in models if _snapshot_if_complete(m)), models[0])
+
+
+def _cached_voice_files() -> Dict[str, str]:
+    """Voice name -> embedding file, for the catalog voices already downloaded."""
+    folder = _hf_snapshot(phonon_pins()["catalog"])
+    try:
+        with open(os.path.join(folder, "voices.jsonl"), encoding="utf-8") as f:
+            rows = [json.loads(line) for line in f if line.strip()]
+    except (OSError, ValueError):
+        return {}
+    found = {}
+    for row in rows:
+        path = os.path.join(folder, row.get("filename", ""))
+        if row.get("name") and os.path.isfile(path):
+            found[row["name"]] = path
+    return found
+
+
+def _model_licence(model: str) -> str:
+    return PHONON_CREDIT + ", non-commercial only" if model == phonon_pins().get("model") \
+        else "Phonon 31M English, Apache-2.0"
+
+
+def load_phonon(lang: str) -> Tuple[Any, str]:
+    """(ptts.TTS, pinned model) for *lang*, loaded once per process.
+
+    ``lang`` picks ptts's text normalizer at load time, so each language has its
+    own instance. English takes 40M, else 31M English; German needs 40M and
+    otherwise raises with a pointer to the gemini backend. One stderr line says
+    which model loaded, since the licence of the output depends on it.
+    """
+    if lang in _phonon_loaded:
+        return _phonon_loaded[lang]
+    import ptts
+
+    pins = phonon_pins()
+    errors: List[str] = []
+    for model in phonon_models(lang):
+        local = _snapshot_if_complete(model)
+        if local is None and not _hub_reachable():
+            errors.append(f"{model}: not cached and the Hub does not answer")
+            continue
+        try:
+            tts = ptts.TTS(local or model, lang=lang, quant=pins["quant"],
+                           voice_catalog=pins["catalog"])
+        except Exception as exc:  # gated without a token, download failed
+            errors.append(f"{model}: {exc}")
+            continue
+        # Registered voices are not looked up in the online catalog.
+        for name, path in _cached_voice_files().items():
+            tts.add_voice(name, path)
+        if errors:
+            print(f"phonon: {errors[0]}", file=sys.stderr)
+        print(f"phonon: {lang} speaks with {model.split('@')[0][len('hf://'):]} "
+              f"({_model_licence(model)})", file=sys.stderr)
+        _phonon_loaded[lang] = (tts, model)
+        return _phonon_loaded[lang]
+    hint = ("German narration needs Phonon 40M multilingual: accept its terms on "
+            "huggingface.co/gradium/phonon-40m-multilingual and log in with `hf auth login`, "
+            f"or use the gemini backend (--voice {GEMINI_BACKEND}:Kore:de). "
+            if lang == "de" else "Run: manim-kit voice setup. ")
+    raise RuntimeError(f"Phonon could not load for {lang}. {hint}Details: " + "; ".join(errors))
+
+
+def phonon_synth(tts: Any, text: str, voice: str) -> Any:
+    """One line from a loaded Phonon model as float32 samples at ``tts.sample_rate``.
+
+    A voice whose embedding is not cached downloads from the pinned catalog, but
+    only when the Hub answers; otherwise this raises instead of letting ptts hang.
+    The sampling seed is fixed, so the same text and voice give the same clip.
+    """
+    import numpy as np
+
+    if voice not in tts.voices and not _hub_reachable():
+        raise RuntimeError(f"Phonon voice {voice!r} is not cached and the Hub does not answer; "
+                           "run `manim-kit voice setup` on a connected host, or pick a cached voice")
+    audio = np.asarray(tts.synth(text, voice=voice), dtype=np.float32)
+    if audio.size == 0:
+        raise RuntimeError(f"Phonon returned no audio for {text[:60]!r} ({voice})")
+    return audio
+
+
+def time_stretch(audio: Any, sample_rate: int, speed: float) -> Any:
+    """*audio* played *speed* times as fast, same pitch, with ffmpeg's atempo filter.
+
+    Phonon has no speed control of its own. 0.5 to 2.0; ffmpeg must be installed
+    (manim needs it anyway). A failure raises rather than ignoring the speed.
+    """
+    import shutil
+    import subprocess
+
+    import numpy as np
+
+    if abs(speed - 1.0) < 1e-3:
+        return audio
+    if not 0.5 <= speed <= 2.0:
+        raise ValueError(f"speed {speed} is outside 0.5..2.0")
+    ffmpeg = shutil.which("ffmpeg")
+    if ffmpeg is None:
+        raise RuntimeError("a speed other than 1.0 needs ffmpeg")
+    cmd = [ffmpeg, "-v", "error", "-f", "f32le", "-ar", str(sample_rate), "-ac", "1",
+           "-i", "pipe:0", "-filter:a", f"atempo={speed:.3f}", "-f", "f32le", "pipe:1"]
+    out = subprocess.run(cmd, input=np.asarray(audio, dtype="<f4").tobytes(),
+                         capture_output=True, check=True, timeout=120).stdout
+    return np.frombuffer(out, dtype="<f4").astype(np.float32)
+
+
+# --- Phonon speech service ---------------------------------------------------------
+
+def _phonon_service_class() -> type:
+    """Build PhononService lazily; defining it needs manim-voiceover imported."""
     import soundfile as sf
     from manim_voiceover.helper import remove_bookmarks
     from manim_voiceover.services.base import SpeechService, initialize_speech_service, path_to_string
 
-    class KokoroService(SpeechService):
-        """Kokoro v1.0 ONNX, running locally on the CPU.
+    class PhononService(SpeechService):
+        """Phonon (ptts), running locally on the CPU.
 
-        The ONNX session is loaded on the first synthesis, not in ``__init__``,
-        so building the service (which a scene does at import time) stays cheap
-        and a cached render never touches the 325 MB model.
+        The model is loaded on the first synthesis, not in ``__init__``, so
+        building the service (which a scene does at import time) stays cheap and
+        a cached render never touches the model.
         """
 
-        def __init__(self, voice: str = "af_heart", lang: str = "en-us",
-                     speed: float = 1.0, model_path: Optional[str] = None,
-                     voices_path: Optional[str] = None, **kwargs: Any) -> None:
+        def __init__(self, voice: str = "Harper", lang: str = "en",
+                     speed: float = 1.0, **kwargs: Any) -> None:
             self.voice = voice
             self.lang = lang
             self.speed = float(speed)
-            default_model, default_voices = kokoro_paths()
-            self.model_path = model_path or default_model
-            self.voices_path = voices_path or default_voices
-            self._kokoro = None
             initialize_speech_service(self, kwargs)
 
-        def _model(self) -> Any:
-            if self._kokoro is None:
-                missing = [p for p in (self.model_path, self.voices_path) if not os.path.isfile(p)]
-                if missing:
-                    raise RuntimeError(
-                        "Kokoro model files are not cached: " + ", ".join(missing)
-                        + ". Run: manim-kit voice setup"
-                    )
-                from kokoro_onnx import Kokoro
-                self._kokoro = Kokoro(self.model_path, self.voices_path)
-            return self._kokoro
-
-        def _input_data(self, input_text: str) -> Dict[str, Any]:
+        def _input_data(self, input_text: str, model: Optional[str] = None) -> Dict[str, Any]:
             # This dict is the cache key manim-voiceover hashes, so every
             # setting that changes the audio has to appear in it.
+            pins = phonon_pins()
             return {
                 "input_text": input_text,
-                "service": "kokoro-v1",
-                "config": {"voice": self.voice, "lang": self.lang, "speed": self.speed},
+                "service": PHONON_BACKEND,
+                "config": {"model": model or expected_phonon_model(self.lang),
+                           "catalog": pins["catalog"], "quant": pins["quant"],
+                           "lang": self.lang, "voice": self.voice, "speed": self.speed},
             }
 
         def generate_from_text(self, text: str, cache_dir: Any = None,
@@ -278,29 +488,28 @@ def _kokoro_service_class() -> type:
                 cache_dir = self.cache_dir
 
             input_text = remove_bookmarks(text)
-            input_data = self._input_data(input_text)
-
-            cached = self.get_cached_result(input_data, cache_dir)
+            cached = self.get_cached_result(self._input_data(input_text), cache_dir)
             if cached is not None:
                 return with_word_boundaries(cached, text, cache_dir)
 
+            tts, model = load_phonon(self.lang)
+            samples = time_stretch(phonon_synth(tts, input_text, self.voice),
+                                   tts.sample_rate, self.speed)
+            # Keyed by the model that really spoke, so a 31M fallback clip is not
+            # served later as if 40M had made it.
+            input_data = self._input_data(input_text, model)
             if path is None:
                 audio_path = self.get_audio_basename(input_data) + ".wav"
             else:
                 audio_path = path_to_string(path)
-
-            samples, sample_rate = self._model().create(
-                input_text, voice=self.voice, speed=self.speed, lang=self.lang
-            )
-            full_path = os.path.join(str(cache_dir), audio_path)
-            sf.write(full_path, samples, sample_rate)
+            sf.write(os.path.join(str(cache_dir), audio_path), samples, tts.sample_rate)
 
             return with_word_boundaries(
                 {"input_text": text, "input_data": input_data, "original_audio": audio_path},
                 text, cache_dir,
             )
 
-    return KokoroService
+    return PhononService
 
 
 def _gemini_service(voice: str, style: Optional[str] = None,
@@ -357,27 +566,20 @@ def _wrap_gemini(service: Any, style: Optional[str] = None) -> Any:
 
 def service_for(spec: str, style: Optional[str] = None, speed: float = 1.0,
                 **kwargs: Any) -> Any:
-    """A SpeechService for *spec*, e.g. ``"kokoro-v1:af_sarah"``.
+    """A SpeechService for *spec*, e.g. ``"phonon:Harper"`` or ``"phonon:Annika:de"``.
 
-    ``style`` is a Gemini-only delivery instruction and is ignored by Kokoro.
+    ``style`` is a Gemini-only delivery instruction and is ignored by Phonon;
+    ``speed`` is a Phonon tempo factor (ffmpeg atempo) that Gemini does not take.
     Extra keyword arguments go to the underlying service (``cache_dir``,
     ``global_speed``, …).
     """
     backend, voice, lang = parse_spec(spec)
-    if backend == KOKORO_BACKEND:
-        cls = _kokoro_service_class()
-        kokoro_lang = _kokoro_lang(lang)
-        return cls(voice=voice, lang=kokoro_lang, speed=speed, **kwargs)
+    if backend == PHONON_BACKEND:
+        cls = _phonon_service_class()
+        return cls(voice=voice, lang=phonon_lang(voice, lang), speed=speed, **kwargs)
+    if abs(speed - 1.0) > 1e-3:
+        raise ValueError(f"speed applies to the {PHONON_BACKEND} backend only")
     return _gemini_service(voice, style=style, **kwargs)
-
-
-def _kokoro_lang(lang: Optional[str]) -> str:
-    """Map a two-letter spec language onto a kokoro-onnx language code."""
-    if not lang:
-        return "en-us"
-    table = {"en": "en-us", "gb": "en-gb", "fr": "fr-fr", "it": "it",
-             "es": "es", "pt": "pt-br", "hi": "hi", "ja": "ja", "zh": "cmn"}
-    return table.get(lang, lang)
 
 
 def default_service(spec: Optional[str] = None, **kwargs: Any) -> Any:
@@ -419,22 +621,33 @@ def backend_status() -> List[Dict[str, Any]]:
         mv_note = f"manim-voiceover not importable ({exc})"
 
     try:
-        import kokoro_onnx  # noqa: F401
-        have_kokoro = True
+        import ptts  # noqa: F401
+        have_ptts = True
     except ImportError:
-        have_kokoro = False
+        have_ptts = False
 
-    kokoro_notes = []
+    pins = phonon_pins()
+    has_40m = bool(pins) and _snapshot_if_complete(pins["model"]) is not None
+    has_31m = bool(pins) and _snapshot_if_complete(pins["model_en"]) is not None
+    phonon_notes = []
     if not have_mv:
-        kokoro_notes.append(mv_note)
-    if not have_kokoro:
-        kokoro_notes.append("kokoro-onnx not installed — run: manim-kit setup")
-    if not kokoro_cached():
-        kokoro_notes.append("model files not cached — run: manim-kit voice setup")
+        phonon_notes.append(mv_note)
+    if not have_ptts:
+        phonon_notes.append("ptts not installed — run: manim-kit setup")
+    if has_40m:
+        model_note = (f"40M multilingual cached: English and German, output {PHONON_CREDIT}, "
+                      "non-commercial only")
+    elif has_31m:
+        model_note = (f"only 31M English cached: English works (Apache-2.0), German needs "
+                      f"40M or {GEMINI_BACKEND}")
+    else:
+        model_note = "no model cached — run: manim-kit voice setup"
+    voices = sorted(_cached_voice_files()) if pins else []
     rows.append({
-        "backend": KOKORO_BACKEND,
-        "usable": have_mv and have_kokoro and kokoro_cached(),
-        "note": "; ".join(kokoro_notes) or f"model cached in {VOICE_CACHE_DIR}",
+        "backend": PHONON_BACKEND,
+        "usable": have_mv and have_ptts and (has_40m or has_31m),
+        "note": "; ".join(phonon_notes + [model_note]
+                          + ([f"voices cached: {', '.join(voices)}"] if voices else [])),
     })
 
     try:
@@ -478,8 +691,9 @@ def _cmd_say(argv: List[str]) -> int:
     p.add_argument("text")
     p.add_argument("--voice", help="backend:voice[:lang] (default: $MANIM_KIT_VOICE or voice.json)")
     p.add_argument("--out", help="output file (default: voice-<backend>-<voice>.mp3 in cwd)")
-    p.add_argument("--style", help="Gemini delivery instruction, ignored by Kokoro")
-    p.add_argument("--speed", type=float, default=1.0, help="Kokoro speaking rate (default: 1.0)")
+    p.add_argument("--style", help="Gemini delivery instruction, ignored by Phonon")
+    p.add_argument("--speed", type=float, default=1.0,
+                   help="Phonon tempo factor 0.5..2.0, applied with ffmpeg (default: 1.0)")
     args = p.parse_args(argv)
 
     spec = resolve_spec(args.voice)
@@ -517,6 +731,36 @@ def _cmd_check(_argv: List[str]) -> int:
     return 0
 
 
+def _cmd_setup(_argv: List[str]) -> int:
+    """Download the Phonon models and the starred voices into the HF cache.
+
+    Loads English and German once and speaks one word per starred Phonon voice,
+    which fetches its embedding, so later renders work offline. German failing
+    (no access to the gated 40M model) is reported with the gemini alternative.
+    """
+    voices: Dict[str, List[str]] = {lang: [PHONON_DEFAULT_VOICES[lang]] for lang in PHONON_LANGS}
+    for entry in curated_voices():
+        backend, voice, lang = parse_spec(entry["spec"])
+        if backend == PHONON_BACKEND and voice not in voices[phonon_lang(voice, lang)]:
+            voices[phonon_lang(voice, lang)].append(voice)
+    failed = 0
+    for lang in PHONON_LANGS:
+        try:
+            tts, model = load_phonon(lang)
+        except Exception as exc:
+            print(f"{lang}	failed	{exc}")
+            failed += 1
+            continue
+        for voice in voices[lang]:
+            try:
+                phonon_synth(tts, "Bereit." if lang == "de" else "Ready.", voice)
+                print(f"{lang}	ok	{voice} ({model})")
+            except Exception as exc:
+                print(f"{lang}	failed	{voice}: {exc}")
+                failed += 1
+    return 1 if failed else 0
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     raw = list(argv) if argv is not None else sys.argv[1:]
     if not raw or raw[0] in ("-h", "--help"):
@@ -527,6 +771,8 @@ def main(argv: Optional[List[str]] = None) -> int:
         return _cmd_say(rest)
     if cmd == "check":
         return _cmd_check(rest)
+    if cmd == "setup":
+        return _cmd_setup(rest)
     print(f"unknown command: {cmd}", file=sys.stderr)
     return 2
 

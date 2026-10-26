@@ -41,7 +41,6 @@ MUSIC_FADE = 2.0    # seconds of fade in and out
 RUBINETTI_FORM = "https://vincerubinetti.github.io/using-the-music-of-3blue1brown/"
 
 VOICE_JSON = os.path.join(SCRIPT_DIR, "voice.json")
-VOICE_DIR = os.path.join(os.path.expanduser("~"), ".cache", "manim-kit", "voices")
 VOICE_MODULE = os.path.join(SCRIPT_DIR, "manim_kit_voice.py")
 # Sidechain ducking, keyed on the narration: the music drops while someone
 # speaks and comes back in the pauses. threshold 0.03 is about -30 dB, so a
@@ -86,7 +85,7 @@ explainer clip, an animated plot, a video of simulation results, or asks to "man
 | Music library | `manim-kit music list\\|fetch\\|add FILE\\|credits` |
 | Narrated scene from a template | `manim-kit new NAME --template narrated` |
 | Render with narration | `manim-kit render FILE.py [--voice SPEC] [--srt] [--no-ducking]` |
-| Voices: list, audition, cache the model | `manim-kit voice list\\|say TEXT\\|setup` |
+| Voices: list, audition, cache the models | `manim-kit voice list\\|say TEXT\\|setup` |
 | Open the newest render of a file | `manim-kit open FILE.py` |
 
 Quality presets: `l` 480p15 · `m` 720p30 · `h` 1080p60 (default) · `p` 1440p60 · `k` 2160p60.
@@ -172,20 +171,27 @@ default marked and says which backend works on this host.
 
 | Spec | Lang | |
 |---|---|---|
-| `kokoro-v1:af_heart` | en | **the default** (`--voice en`) — warm, a little expressive |
-| `kokoro-v1:af_sarah` | en | even, unhurried, good for maths |
-| `kokoro-v1:af_sky` | en | lighter, younger |
-| `kokoro-v1:am_puck` | en | male, the clearest of the Kokoro male voices |
+| `phonon:Harper` | en | **the default** (`--voice en`) — American female, confident and friendly |
+| `phonon:Hadley` | en | American female, even and kind |
+| `phonon:Trevor` | en | American male, warm |
+| `phonon:Spencer` | en | British male, light and patient |
+| `phonon:Annika:de` | de | **German default** (`--voice de`) — German female, sparky |
+| `phonon:Anton:de` | de | German male |
 | `gemini-flash-tts:Puck` | en | male, best prosody — paid API |
 | `gemini-flash-tts:Leda` | en | calm female, good for a long explainer — paid API |
-| `gemini-flash-tts:Kore:de` | de | **German default** (`--voice de`), firm and clear — paid API |
+| `gemini-flash-tts:Kore:de` | de | German female, firm and clear — paid API |
 | `gemini-flash-tts:Aoede:de` | de | German female, softer — paid API |
 | `gemini-flash-tts:Charon:de` | de | German male — paid API |
 
-`kokoro-v1` runs offline on the CPU at roughly 0.4x real time (10 minutes of narration
-takes about 4). `gemini-flash-tts` calls the Gemini API and **costs money** — about
-$0.006 per two-sentence line, so a 10-minute explainer is a few cents. There is no
-offline German voice in this version.
+`phonon` runs gradium's Phonon 40M multilingual model offline on the CPU, English and
+German. Its output is **CC BY-NC 4.0: non-commercial use only**, with the credit
+"Phonon by Gradium, CC BY-NC 4.0". When 40M cannot load, English falls back to Phonon
+31M English (Apache-2.0, same voice names) and German fails. Any other Phonon voice from
+`voice.json` works too (`phonon:Maeve`, `phonon:Mats:de`). Old `kokoro-v1:<id>` specs
+still work and map to a Phonon voice (`af_heart` → Hadley), with a note.
+`gemini-flash-tts` calls the Gemini API and **costs money** — about $0.006 per
+two-sentence line, so a 10-minute explainer is a few cents. **For commercial work use a
+Gemini voice**, in English and in German.
 
 Pick one with `--voice SPEC`; without it the scene uses `$MANIM_KIT_VOICE`, else the
 fleet-wide default in `voice.json`. Audition one without rendering:
@@ -195,9 +201,12 @@ manim-kit voice say "The derivative measures how fast a function changes."
 manim-kit voice say "Kurz erklärt." --voice gemini-flash-tts:Aoede:de --open
 ```
 
-`manim-kit voice setup` downloads the Kokoro model (354 MB) into
-`~/.cache/manim-kit/voices/` and checks its SHA-256. Run it once per host;
-`manim-kit doctor` says whether it is there.
+`manim-kit voice setup` downloads the Phonon 40M model and the voices above into the
+Hugging Face cache, pinned to fixed Hub revisions. The 40M model is gated: the host needs
+`hf auth login` with an account that accepted its terms; without it, setup fetches 31M
+English and reports German as failed. Run it once per host;
+`manim-kit doctor` says which model is cached. Without a network, voices that were never
+downloaded raise an error instead of hanging.
 
 ### Music under the voice
 
@@ -211,11 +220,12 @@ flat. A silent render is mixed exactly as before. The video is never re-encoded.
 
 ### Credits
 
-Only the music needs a credit: the bundled tracks are CC BY, and the credit line printed
-after the render goes into the video description. The voices need none — Kokoro's
-Apache-2.0 licence covers the model, not the audio it produces, and Google's Gemini API
-terms put no attribution requirement on generated speech. If the platform you upload to
-asks whether the video contains synthetic media, answer yes for the narration.
+The bundled music tracks are CC BY: the credit line printed after the render goes into
+the video description. A Phonon voice needs one too: "Phonon by Gradium, CC BY-NC 4.0",
+and the video must be non-commercial (`render` prints the line). If the video is
+commercial, render with a Gemini voice instead; Google's Gemini API terms put no
+attribution requirement on generated speech. If the platform you upload to asks whether
+the video contains synthetic media, answer yes for the narration.
 
 ### Writing a narrated explainer
 
@@ -224,10 +234,11 @@ asks whether the video contains synthetic media, answer yes for the narration.
    scenes beat one long one: they render, re-voice and debug independently.
 3. Each block gets at most two sentences and the animation that illustrates them.
    Bookmarks for the "now look at this" moments.
-4. Draft with `-q l` and the local Kokoro voice — seconds per render, no API cost.
+4. Draft with `-q l` and the local Phonon voice — seconds per render, no API cost.
 5. Ship with `-q h`. Switching to a Gemini voice for the final pass re-synthesizes every
    line, so decide the wording first.
-6. Tell the user the music credit line, and if a Gemini voice was used, that it was paid.
+6. Tell the user the music credit line, and either the Phonon credit and its
+   non-commercial limit, or, for a Gemini voice, that it was paid.
 
 ## Animating your own simulation or data
 
@@ -801,66 +812,36 @@ def voice_default() -> str:
     from_env = os.environ.get("MANIM_KIT_VOICE")
     if from_env:
         return from_env
-    return str(voice_manifest().get("default") or "kokoro-v1:af_heart")
+    return str(voice_manifest().get("default") or "phonon:Harper")
+
+
+_legacy_noted: set = set()
 
 
 def expand_spec(spec: str) -> str:
-    """A bare language code (``de``) becomes that language's default spec."""
+    """A bare language code (``de``) becomes that language's default spec.
+
+    An old ``kokoro-v1:<id>`` spec becomes its Phonon voice from voice.json's
+    ``phonon.kokoro`` table, with a note once per spec. Mirrors
+    ``manim_kit_voice.migrate_spec``; an unmapped Kokoro name stays as it is
+    and fails ``_valid_spec``.
+    """
     table = voice_manifest().get("language_defaults", {})
-    return str(table.get(spec.strip().lower(), spec))  # type: ignore[union-attr]
+    spec = str(table.get(spec.strip().lower(), spec))  # type: ignore[union-attr]
+    parts = spec.strip().split(":")
+    if len(parts) >= 2 and parts[0] == "kokoro-v1":
+        voice = voice_manifest().get("phonon", {}).get("kokoro", {}).get(parts[1].strip())  # type: ignore[union-attr]
+        if voice:
+            new = f"phonon:{voice}"
+            if spec not in _legacy_noted:
+                _legacy_noted.add(spec)
+                _info(f"kokoro-v1 was removed; {spec.strip()} now speaks as {new}")
+            return new
+    return spec
 
 
 def curated_voices() -> List[Dict[str, str]]:
     return list(voice_manifest().get("voices", []))  # type: ignore[arg-type]
-
-
-def kokoro_manifest() -> List[Dict[str, object]]:
-    """The Kokoro model files: name, url, sha256, bytes."""
-    model = voice_manifest().get("kokoro_model", {})
-    return list(model.get("files", []))  # type: ignore[union-attr]
-
-
-def _voice_file_path(entry: Dict[str, object]) -> str:
-    return os.path.join(VOICE_DIR, str(entry["name"]))
-
-
-def _voice_file_cached(entry: Dict[str, object]) -> bool:
-    path = _voice_file_path(entry)
-    return os.path.isfile(path) and _sha256(path) == entry["sha256"]
-
-
-def kokoro_cached() -> bool:
-    """True when every Kokoro file is present with the right digest."""
-    files = kokoro_manifest()
-    return bool(files) and all(_voice_file_cached(e) for e in files)
-
-
-def fetch_voice_file(entry: Dict[str, object], force: bool = False) -> str:
-    """Download one Kokoro file into VOICE_DIR, verifying its sha256.
-
-    Same shape as fetch_track: a ``.part`` file that is only renamed once the
-    digest matches, so an interrupted download cannot pass as cached later.
-    """
-    path = _voice_file_path(entry)
-    if not force and _voice_file_cached(entry):
-        return path
-    os.makedirs(VOICE_DIR, exist_ok=True)
-    part = path + ".part"
-    _info(f"fetching {entry['name']} ({int(entry['bytes']) / 1e6:.0f} MB)")
-    req = urllib.request.Request(str(entry["url"]), headers={"User-Agent": f"manim-kit/{__version__}"})
-    try:
-        with urllib.request.urlopen(req, timeout=120) as resp, open(part, "wb") as out:
-            shutil.copyfileobj(resp, out)
-    except Exception as exc:
-        if os.path.exists(part):
-            os.remove(part)
-        raise RuntimeError(f"could not download {entry['name']}: {exc}") from exc
-    got = _sha256(part)
-    if got != entry["sha256"]:
-        os.remove(part)
-        raise RuntimeError(f"checksum mismatch for {entry['name']}: got {got}, expected {entry['sha256']}")
-    os.replace(part, path)
-    return path
 
 
 def _voice_check() -> List[Dict[str, str]]:
@@ -892,7 +873,14 @@ def _valid_spec(spec: str) -> bool:
     """Whether *spec* names a known backend and a voice. Mirrors parse_spec."""
     parts = spec.split(":")
     backends = set(voice_manifest().get("backends", {}))  # type: ignore[arg-type]
-    return 2 <= len(parts) <= 3 and parts[0] in backends and bool(parts[1].strip())
+    if not (2 <= len(parts) <= 3 and parts[0] in backends and parts[1].strip()):
+        return False
+    if parts[0] == "phonon":
+        pins = voice_manifest().get("phonon", {})
+        known = set(pins.get("voices", {})) | set(pins.get("voices_de", {}))  # type: ignore[union-attr]
+        lang_ok = len(parts) == 2 or parts[2].strip() in ("", "en", "de")
+        return lang_ok and (not known or parts[1].strip() in known)
+    return True
 
 
 # --- commands ----------------------------------------------------------------------
@@ -1082,9 +1070,11 @@ def cmd_render(args: argparse.Namespace) -> int:
     existing = env.get("PYTHONPATH")
     env["PYTHONPATH"] = SCRIPT_DIR + (os.pathsep + existing if existing else "")
     voice_spec = expand_spec(args.voice or env.get("MANIM_KIT_VOICE") or "")
-    if args.voice:
-        if not _valid_spec(voice_spec):
-            _fail(f"unknown voice spec {args.voice!r}; see: manim-kit voice list")
+    if args.voice and not _valid_spec(voice_spec):
+        _fail(f"unknown voice spec {args.voice!r}; see: manim-kit voice list")
+    if voice_spec:
+        # Exported expanded, so the scene process neither re-expands a language
+        # code nor prints the Kokoro note a second time.
         env["MANIM_KIT_VOICE"] = voice_spec
     env["MANIM_KIT_SRT"] = "1" if args.srt else "0"
 
@@ -1129,9 +1119,16 @@ def cmd_render(args: argparse.Namespace) -> int:
     if mixed and credit:
         print("Music credit — put this in the video description:")
         print(f"  {credit}")
-    if narrated and voice_spec.startswith("gemini"):
-        print(f"Voice: {voice_spec} (Gemini TTS, paid — about $0.006 per narration line; "
+    spoken = voice_spec or expand_spec(voice_default())
+    if narrated and spoken.startswith("gemini"):
+        print(f"Voice: {spoken} (Gemini TTS, paid — about $0.006 per narration line; "
               "unchanged lines are served from media/voiceovers/ and cost nothing)")
+    elif narrated and spoken.startswith("phonon"):
+        print(f"Voice: {spoken}. Phonon 40M output is non-commercial only; put this in the "
+              "video description:")
+        print("  Voice: Phonon by Gradium, CC BY-NC 4.0")
+        print("  For a commercial video, render again with a Gemini voice "
+              "(--voice gemini-flash-tts:Puck, or gemini-flash-tts:Kore:de).")
     return 0
 
 
@@ -1223,26 +1220,14 @@ def cmd_voice(args: argparse.Namespace) -> int:
         return 0
 
     if action == "setup":
-        files = kokoro_manifest()
-        if not files:
-            _fail(f"no Kokoro files listed in {VOICE_JSON}")
-        total = sum(int(e["bytes"]) for e in files)
-        _info(f"Kokoro v1.0 model into {VOICE_DIR}: "
-              + ", ".join(f"{e['name']} {int(e['bytes']) / 1e6:.0f} MB" for e in files)
-              + f" ({total / 1e6:.0f} MB total)")
-        failed = 0
-        for entry in files:
-            if not args.force and _voice_file_cached(entry):
-                _ok(f"{entry['name']} already cached")
-                continue
-            try:
-                path = fetch_voice_file(entry, force=args.force)
-            except RuntimeError as exc:
-                _warn(str(exc))
-                failed += 1
-                continue
-            _ok(f"{entry['name']} → {path}")
-        if failed:
+        _require_manim()
+        _info("Phonon model and the starred voices into the Hugging Face cache "
+              "(about 40 MB; the 40M model needs `hf auth login` with its terms accepted, "
+              "else English uses 31M)")
+        proc = subprocess.run([VENV_PYTHON, VOICE_MODULE, "setup"])
+        if proc.returncode != 0:
+            _warn("some voices could not be set up (see above); German without Phonon 40M "
+                  "can use --voice gemini-flash-tts:Kore:de")
             return 1
         print("Run: manim-kit voice say \"A first test of the narration voice.\"")
         return 0
@@ -1418,8 +1403,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     s = sub.add_parser(
         "voice", help="narration voices: list them, audition one, cache the model",
-        epilog="A spec is backend:voice[:lang]. kokoro-v1 runs offline on the CPU; "
-               "gemini-flash-tts calls the paid Gemini API and needs GEMINI_API_KEY.",
+        epilog="A spec is backend:voice[:lang]. phonon runs offline on the CPU (English and "
+               "German, output CC BY-NC 4.0, non-commercial only); gemini-flash-tts calls the "
+               "paid Gemini API, needs GEMINI_API_KEY and is the choice for commercial work.",
     )
     s.add_argument("action", nargs="?", choices=["list", "say", "setup"], default="list")
     s.add_argument("text", nargs="*", help="the text to speak (say)")
@@ -1428,7 +1414,6 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--out", help="output file (default: voice-<backend>-<voice>.mp3 in cwd)")
     s.add_argument("--style", help="Gemini delivery instruction, e.g. 'Read this slowly'")
     s.add_argument("--open", action="store_true", help="open the clip when it is written")
-    s.add_argument("--force", action="store_true", help="re-download the model files (setup)")
     s.set_defaults(func=cmd_voice)
 
     s = sub.add_parser("open", help="open the newest render of a scene file")

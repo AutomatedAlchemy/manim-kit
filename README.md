@@ -67,12 +67,12 @@ manim-kit music fetch                         # pre-download every bundled track
 manim-kit music add ~/my_track.mp3            # use your own audio
 
 manim-kit new lecture --template narrated     # a scene that speaks
-manim-kit render lecture.py --voice kokoro-v1:af_heart
+manim-kit render lecture.py --voice phonon:Hadley
 manim-kit render lecture.py --srt             # also write subtitles
 manim-kit render lecture.py --no-ducking      # flat music bed
 manim-kit voice list                          # the voices, and which work here
 manim-kit voice say "A quick audition."       # preview without rendering
-manim-kit voice setup                         # cache the local Kokoro model
+manim-kit voice setup                         # cache the local Phonon models and voices
 ```
 
 Templates: `basic` (shapes + transform), `text` (Text + MathTex highlight),
@@ -145,33 +145,56 @@ A voice spec is `backend:voice[:lang]`. Two backends ship in this version:
 
 | Spec | Lang | Notes |
 |---|---|---|
-| `kokoro-v1:af_heart` | en | **default** (`--voice en`) — warm, a little expressive |
-| `kokoro-v1:af_sarah` | en | even, unhurried |
-| `kokoro-v1:af_sky` | en | lighter, younger |
-| `kokoro-v1:am_puck` | en | male |
+| `phonon:Harper` | en | **default** (`--voice en`) — American female, confident and friendly |
+| `phonon:Hadley` | en | American female, even and kind |
+| `phonon:Trevor` | en | American male, warm |
+| `phonon:Spencer` | en | British male, light and patient |
+| `phonon:Annika:de` | de | **German default** (`--voice de`) — German female, sparky |
+| `phonon:Anton:de` | de | German male |
 | `gemini-flash-tts:Puck` | en | best prosody, paid |
 | `gemini-flash-tts:Leda` | en | calm, paid |
-| `gemini-flash-tts:Kore:de` | de | **German default** (`--voice de`), firm and clear, paid |
+| `gemini-flash-tts:Kore:de` | de | German female, firm and clear, paid |
 | `gemini-flash-tts:Aoede:de` | de | German female, softer, paid |
 | `gemini-flash-tts:Charon:de` | de | German male, paid |
 
-`kokoro-v1` is the [Kokoro v1.0 ONNX](https://github.com/thewh1teagle/kokoro-onnx) model
-running locally on the CPU at about 0.4x real time — offline, free, Apache-2.0.
-`gemini-flash-tts` calls Gemini's `gemini-3.1-flash-tts-preview`: better prosody and the
-only German option here, at roughly $0.006 per two-sentence line ($1/1M input text tokens
-plus $20/1M audio output tokens). Piper, gTTS and edge-tts are deliberately out — see
-[NARRATION-DESIGN.md](NARRATION-DESIGN.md) for the licence reasoning.
+`phonon` runs gradium's [Phonon 40M multilingual](https://huggingface.co/gradium/phonon-40m-multilingual)
+model locally on the CPU through [ptts](https://pypi.org/project/ptts/), in English and
+German, offline and free. Every voice in `voice.json`'s `phonon` section works, not only
+the ones above. Old `kokoro-v1:<id>` specs from before 2026-10-26 still work: they map
+to the Phonon voice of the same accent and gender (`af_heart` → Hadley, `af_sarah` →
+Harper) and print a note.
+
+`gemini-flash-tts` calls Gemini's `gemini-3.1-flash-tts-preview`, at roughly $0.006 per
+two-sentence line ($1/1M input text tokens plus $20/1M audio output tokens). Piper, gTTS
+and edge-tts are deliberately out — see [NARRATION-DESIGN.md](NARRATION-DESIGN.md) for
+the licence reasoning.
+
+### Voice licences
+
+- **Phonon 40M multilingual** output is **CC BY-NC 4.0**: non-commercial use only, and the
+  video needs the credit "Phonon by Gradium, CC BY-NC 4.0". `render` prints that line
+  after a narrated render.
+- When 40M cannot load (the model is gated on Hugging Face), English falls back to
+  **Phonon 31M English**, Apache-2.0, with the same voice names. German then fails with
+  an error that names the gemini backend. The stderr line at model load says which model
+  spoke.
+- **Commercial work uses the `gemini-flash-tts` backend**, in English and in German.
+  Google's Gemini API terms put no attribution requirement on generated speech.
 
 Selection order: `--voice SPEC`, then `$MANIM_KIT_VOICE`, then the `default` in
 `voice.json`. A bare language code in either place (`--voice de`) picks that language's
-entry in `language_defaults`: English is `kokoro-v1:af_heart`, German is
-`gemini-flash-tts:Kore:de`. That file is committed
+entry in `language_defaults`: English is `phonon:Harper`, German is
+`phonon:Annika:de`. That file is committed
 and the repo is synced, so the default is fleet-wide; it also carries the curated voice
-list and the Kokoro model manifest (URL, SHA-256, size).
+list and the Phonon pins: the two models and the voice catalog at fixed Hub revisions,
+the quantization, the voice names and the Kokoro-name map.
 
-`manim-kit voice setup` downloads the two Kokoro files (354 MB) into
-`~/.cache/manim-kit/voices/` and verifies their SHA-256, the same way music tracks are
-fetched. The model files are not committed.
+`manim-kit voice setup` downloads the Phonon 40M model (about 40 MB) and the voices
+above into the Hugging Face cache, `~/.cache/huggingface/hub`. The 40M model needs
+`hf auth login` with an account that accepted its terms; without that, setup fetches
+Phonon 31M English instead and reports German as failed. After that, narration runs
+offline: a model or voice is loaded from the local cache, and a download is only tried
+when the Hub answers within 3 s, so a dead network gives an error instead of a hang.
 
 The Gemini backend needs an API key. The names are tried in the order
 `GEMINI_API_KEY_PAID`, `GEMINI_API_KEY`, `GOOGLE_API_KEY`, so a paid key wins over a
@@ -220,4 +243,5 @@ itself when manim is not installed in `.venv`.
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT — see [LICENSE](LICENSE). That covers this code, not the narration it makes: audio
+from the default `phonon` voices is CC BY-NC 4.0 (see [Voice licences](#voice-licences)).

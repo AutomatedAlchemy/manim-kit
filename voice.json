@@ -1,36 +1,42 @@
 {
   "_comment": [
     "Narration voices for `manim-kit render --voice` and `manim-kit voice say`.",
-    "Text only: the Kokoro model files are fetched into ~/.cache/manim-kit/voices/",
-    "by `manim-kit voice setup` and checked against the sha256 below, never committed.",
+    "Text only: the Phonon models and voice embeddings are fetched into the Hugging Face",
+    "cache (~/.cache/huggingface/hub) on first use or by `manim-kit voice setup`, pinned",
+    "to the Hub revisions in the phonon section below, never committed.",
     "",
     "A spec string is 'backend:voice' or 'backend:voice:lang'. The default below is",
     "fleet-wide, because this repo is synced to every host. $MANIM_KIT_VOICE overrides",
     "it per host or per shell, and `--voice SPEC` overrides both.",
     "",
-    "Two backends in this version (user decision 2026-09-17): kokoro-v1 runs offline on",
-    "the CPU and is the default; gemini-flash-tts calls the API, costs money and has the",
-    "better prosody plus real German. Piper, gTTS and edge-tts stay out - see",
-    "NARRATION-DESIGN.md for the licence reasoning.",
+    "Two backends (user decision 2026-10-26, replacing kokoro-v1): phonon runs gradium's",
+    "Phonon 40M multilingual offline on the CPU, English and German, and is the default.",
+    "Its output is CC BY-NC 4.0: non-commercial only, credit 'Phonon by Gradium, CC BY-NC 4.0'.",
+    "When 40M cannot load, English falls back to Phonon 31M English (Apache-2.0, same voice",
+    "names); German then fails. Commercial work uses gemini-flash-tts, which calls the API",
+    "and costs money. Piper, gTTS and edge-tts stay out - see NARRATION-DESIGN.md.",
+    "",
+    "Old kokoro-v1:<id> specs still work: phonon.kokoro maps each Kokoro voice to the",
+    "Phonon voice of the same accent and gender (af_heart -> Hadley, af_sarah -> Harper).",
     "",
     "Gemini billing: $1 per 1M input text tokens plus $20 per 1M audio output tokens,",
     "about $0.006 for a two-sentence narration line.",
     "",
     "language_defaults maps a bare language code to a spec, so `--voice de` or",
-    "MANIM_KIT_VOICE=de picks the German default. User decision 2026-09-24:",
-    "af_heart for English (it replaced af_sarah as the default), Kore for German."
+    "MANIM_KIT_VOICE=de picks the German default. User decision 2026-10-26:",
+    "Harper for English, Annika for German, both Phonon."
   ],
-  "default": "kokoro-v1:af_heart",
+  "default": "phonon:Harper",
   "language_defaults": {
-    "en": "kokoro-v1:af_heart",
-    "de": "gemini-flash-tts:Kore:de"
+    "en": "phonon:Harper",
+    "de": "phonon:Annika:de"
   },
   "backends": {
-    "kokoro-v1": {
-      "label": "Kokoro v1.0 (kokoro-onnx)",
+    "phonon": {
+      "label": "Phonon 40M multilingual (ptts), fallback Phonon 31M English",
       "runs": "local CPU",
-      "licence": "Apache-2.0 model and code",
-      "note": "Offline. About 0.4x real time on a 12-thread laptop, so 10 minutes of narration takes 4 minutes."
+      "licence": "40M: CC BY-NC 4.0, non-commercial only, credit 'Phonon by Gradium, CC BY-NC 4.0'. 31M English: Apache-2.0. ptts runtime: MIT or Apache-2.0.",
+      "note": "Offline, 24 kHz, English and German. The 40M model is gated on Hugging Face: the first download needs a token whose account accepted its terms."
     },
     "gemini-flash-tts": {
       "label": "Gemini TTS",
@@ -42,24 +48,34 @@
   },
   "voices": [
     {
-      "spec": "kokoro-v1:af_heart",
+      "spec": "phonon:Harper",
       "lang": "en",
-      "note": "Default. Warm American female voice, a little more expressive than af_sarah."
+      "note": "Default. American female, adult, confident and friendly."
     },
     {
-      "spec": "kokoro-v1:af_sarah",
+      "spec": "phonon:Hadley",
       "lang": "en",
-      "note": "Even, unhurried American female voice."
+      "note": "American female, middle-aged, even and kind. Old kokoro-v1:af_heart specs map here."
     },
     {
-      "spec": "kokoro-v1:af_sky",
+      "spec": "phonon:Trevor",
       "lang": "en",
-      "note": "Lighter, younger American female voice."
+      "note": "American male, middle-aged, warm and mid-low."
     },
     {
-      "spec": "kokoro-v1:am_puck",
+      "spec": "phonon:Spencer",
       "lang": "en",
-      "note": "American male voice, the clearest of the male Kokoro set."
+      "note": "British male, middle-aged, light and patient."
+    },
+    {
+      "spec": "phonon:Annika:de",
+      "lang": "de",
+      "note": "German default. German female, adult, sparky and attentive."
+    },
+    {
+      "spec": "phonon:Anton:de",
+      "lang": "de",
+      "note": "German male, adult, vibrant and engaging."
     },
     {
       "spec": "gemini-flash-tts:Puck",
@@ -74,7 +90,7 @@
     {
       "spec": "gemini-flash-tts:Kore:de",
       "lang": "de",
-      "note": "German default. Firm, clear female voice. There is no offline German option in this version."
+      "note": "German female voice, firm and clear. The German choice for commercial work, paid."
     },
     {
       "spec": "gemini-flash-tts:Aoede:de",
@@ -87,22 +103,81 @@
       "note": "German male voice."
     }
   ],
-  "kokoro_model": {
-    "cache_dir": "~/.cache/manim-kit/voices",
-    "release": "https://github.com/thewh1teagle/kokoro-onnx/releases/tag/model-files-v1.0",
-    "files": [
-      {
-        "name": "kokoro-v1.0.onnx",
-        "url": "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/kokoro-v1.0.onnx",
-        "sha256": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
-        "bytes": 325532387
-      },
-      {
-        "name": "voices-v1.0.bin",
-        "url": "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/voices-v1.0.bin",
-        "sha256": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d",
-        "bytes": 28214398
-      }
-    ]
+  "phonon": {
+    "model": "hf://gradium/phonon-40m-multilingual@1537ce46c64f42903e0d608b132ccb073dac46d2",
+    "model_en": "hf://gradium/phonon-31m-en@92741c5b07d085ff840e26fea8ce43110b87852f",
+    "catalog": "hf://gradium/phonon-voices@da6c9ec0d47be8df5c87c730a3aa97187f3229c3",
+    "quant": "q8",
+    "voices": {
+      "Harper": "American female, adult, confident and friendly",
+      "Hadley": "American female, middle-aged, even and kind",
+      "Everly": "American female, middle-aged, soft and relaxed",
+      "Delia": "American female, middle-aged, low and grounded",
+      "Juniper": "American female, young adult, cheerful",
+      "Zoey": "American female, adult, playful and upbeat",
+      "Easton": "American male, young adult, punchy",
+      "Micah": "American male, young adult, high energy",
+      "Trevor": "American male, middle-aged, warm mid-low",
+      "Russell": "American male, adult, high energy",
+      "Preston": "American male, middle-aged, steady and low",
+      "Miles": "American male, young adult, resonant",
+      "Maeve": "British female, adult, bright",
+      "Freya": "British female, young, bubbly",
+      "Pippa": "British female, adult, upbeat",
+      "Imogen": "British female, adult, friendly",
+      "Lottie": "British female, young adult, quick",
+      "Bryony": "British female, middle-aged, full and relaxed",
+      "Alfie": "British male, young adult, punchy",
+      "Hugh": "British male, middle-aged, soft and airy",
+      "Edwin": "British male, middle-aged, firm",
+      "Spencer": "British male, middle-aged, light and patient",
+      "Toby": "British male, adult, bright",
+      "Teddy": "British male, young adult, quick"
+    },
+    "voices_de": {
+      "Annika": "German female, adult, sparky and attentive",
+      "Nele": "German female, middle-aged, rounded and flowing",
+      "Josefine": "German female, middle-aged, even and sincere",
+      "Jette": "German female, young, upbeat and warm",
+      "Jule": "German female, young adult, open and cheerful",
+      "Lotta": "German female, young adult, high energy",
+      "Svea": "German female, young adult, brisk",
+      "Anton": "German male, adult, vibrant and engaging",
+      "Mats": "German male, adult, sparky and attentive",
+      "Henrik": "German male, adult, easy-going and friendly",
+      "Leon": "German male, adult, bright and welcoming",
+      "Mirko": "German male, young adult, punchy",
+      "Mika": "German male, young adult, firm and resonant"
+    },
+    "kokoro": {
+      "af_sarah": "Harper",
+      "af_heart": "Hadley",
+      "af_bella": "Zoey",
+      "af_nicole": "Juniper",
+      "af_sky": "Everly",
+      "af_alloy": "Delia",
+      "af_aoede": "Hadley",
+      "af_jessica": "Zoey",
+      "af_kore": "Delia",
+      "af_nova": "Juniper",
+      "af_river": "Everly",
+      "am_adam": "Preston",
+      "am_michael": "Easton",
+      "am_eric": "Trevor",
+      "am_liam": "Micah",
+      "am_onyx": "Russell",
+      "am_echo": "Miles",
+      "am_fenrir": "Russell",
+      "am_puck": "Micah",
+      "am_santa": "Trevor",
+      "bf_emma": "Maeve",
+      "bf_isabella": "Imogen",
+      "bf_alice": "Pippa",
+      "bf_lily": "Freya",
+      "bm_george": "Edwin",
+      "bm_lewis": "Hugh",
+      "bm_daniel": "Spencer",
+      "bm_fable": "Alfie"
+    }
   }
 }
