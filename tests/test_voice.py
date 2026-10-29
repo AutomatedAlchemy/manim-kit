@@ -126,6 +126,12 @@ def test_subcaptions_are_off_unless_asked(monkeypatch):
 
 # --- Gemini key lookup -------------------------------------------------------------
 
+@pytest.fixture(autouse=True)
+def _no_user_env_file(tmp_path, monkeypatch):
+    """Keep a real ~/.config/manim-kit/.env out of every test."""
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "config"))
+
+
 def test_gemini_key_prefers_the_environment(tmp_path, monkeypatch):
     monkeypatch.delenv("GEMINI_API_KEY_PAID", raising=False)
     monkeypatch.setenv(v.ENV_FILE_VAR, str(tmp_path / "missing.env"))
@@ -157,6 +163,17 @@ def test_gemini_key_prefers_a_paid_key_in_a_file_over_a_free_one_in_the_environm
     assert v.gemini_key() == "paid-from-file"
     assert v._export_gemini_key()
     assert os.environ["GEMINI_API_KEY"] == "paid-from-file"   # overwrites the free key
+
+
+def test_gemini_key_falls_back_to_the_user_config_file(tmp_path, monkeypatch):
+    for name in v.GEMINI_KEY_NAMES:
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.delenv(v.ENV_FILE_VAR, raising=False)
+    user_file = tmp_path / "config" / "manim-kit" / ".env"
+    user_file.parent.mkdir(parents=True)
+    user_file.write_text("GEMINI_API_KEY=from-user-file\n")
+    assert v.user_env_file() == str(user_file)
+    assert v.gemini_key() == "from-user-file"
 
 
 def test_gemini_key_absent_is_none_not_an_error(tmp_path, monkeypatch):

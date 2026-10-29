@@ -46,8 +46,9 @@ PHONON_CREDIT = "Phonon by Gradium, CC BY-NC 4.0"
 HUB_TIMEOUT_S = 3.0
 GEMINI_MODEL = "gemini-3.1-flash-tts-preview"
 
-# The Gemini key comes from the environment, or from the .env file this variable
-# names. A scene runs from its own directory, which usually has no .env.
+# The Gemini key comes from the environment, from the .env file this variable
+# names, or from the per-user file user_env_file() returns. A scene runs from its
+# own directory, which usually has no .env.
 ENV_FILE_VAR = "MANIM_KIT_ENV_FILE"
 # The paid key comes first: the free tier allows 10 TTS requests per day, fewer
 # than one narrated scene needs (user, 2026-10-17).
@@ -194,16 +195,23 @@ def _read_env_file(path: str) -> Dict[str, str]:
     return values
 
 
+def user_env_file() -> str:
+    """$XDG_CONFIG_HOME/manim-kit/.env, by default ~/.config/manim-kit/.env."""
+    base = os.environ.get("XDG_CONFIG_HOME") or os.path.join(os.path.expanduser("~"), ".config")
+    return os.path.join(base, "manim-kit", ".env")
+
+
 def gemini_key() -> Optional[str]:
     """The Gemini API key, or None. Never printed anywhere.
 
     Names in GEMINI_KEY_NAMES order, so a paid key anywhere beats a free one.
     Each name is looked up in the environment first, then in the file named by
-    $MANIM_KIT_ENV_FILE (the scene process runs from the scene's directory,
-    which usually has no .env).
+    $MANIM_KIT_ENV_FILE, then in user_env_file(). The files matter because the
+    scene process runs from the scene's directory, which usually has no .env,
+    and a variable set in an interactive shell's rc file misses cron and scripts.
     """
-    env_file = os.environ.get(ENV_FILE_VAR)
-    files = [_read_env_file(env_file)] if env_file and os.path.isfile(env_file) else []
+    paths = (os.environ.get(ENV_FILE_VAR), user_env_file())
+    files = [_read_env_file(p) for p in paths if p and os.path.isfile(p)]
     for name in GEMINI_KEY_NAMES:
         for values in [os.environ, *files]:
             if values.get(name):
@@ -525,8 +533,8 @@ def _gemini_service(voice: str, style: Optional[str] = None,
     # the environment first (load_dotenv does not override a variable that is set).
     if not _export_gemini_key():
         raise RuntimeError(
-            "No Gemini API key. Set GEMINI_API_KEY_PAID or GEMINI_API_KEY, or point "
-            "$MANIM_KIT_ENV_FILE at a .env that has it."
+            "No Gemini API key. Set GEMINI_API_KEY_PAID or GEMINI_API_KEY, point "
+            f"$MANIM_KIT_ENV_FILE at a .env that has it, or put it in {user_env_file()}."
         )
 
     from manim_voiceover.services.gemini import GeminiService
@@ -659,7 +667,7 @@ def backend_status() -> List[Dict[str, Any]]:
     if not have_genai:
         gemini_notes.append("google-genai not installed — run: manim-kit setup")
     if not have_key:
-        gemini_notes.append("no GEMINI_API_KEY (env or $MANIM_KIT_ENV_FILE)")
+        gemini_notes.append(f"no GEMINI_API_KEY (env, $MANIM_KIT_ENV_FILE or {user_env_file()})")
     rows.append({
         "backend": GEMINI_BACKEND,
         "usable": have_mv and have_genai and have_key,

@@ -199,9 +199,11 @@ when the Hub answers within 3 s, so a dead network gives an error instead of a h
 The Gemini backend needs an API key. The names are tried in the order
 `GEMINI_API_KEY_PAID`, `GEMINI_API_KEY`, `GOOGLE_API_KEY`, so a paid key wins over a
 free-tier one (the free tier allows 10 TTS requests a day). Each name is looked up in the
-environment first, then in the file named by `$MANIM_KIT_ENV_FILE`. Set that variable when
-the key lives in a `.env`, since the scene process runs from the scene's directory, which
-usually has no `.env` of its own.
+environment first, then in the file named by `$MANIM_KIT_ENV_FILE`, then in
+`~/.config/manim-kit/.env` (`$XDG_CONFIG_HOME/manim-kit/.env` when that is set). The scene
+process runs from the scene's directory, which usually has no `.env` of its own. The
+per-user file also works for renders started from cron or a script, where a variable set
+in an interactive shell's rc file is missing.
 
 ### Music under a voice
 
