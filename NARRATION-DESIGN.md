@@ -67,7 +67,7 @@ Spec string: `backend:voice[:lang]`, e.g. `kokoro:af_heart`, `piper:de_DE-thorst
 | `piper` | local CPU | EN, DE (thorsten) | default for German; fastest of all; MIT code, voices limited to CC0 / CC BY / PD (thorsten, kerstin, alba, cori, libritts_r) |
 | `gemini` (manim-voiceover's own `GeminiService`) | API, paid | EN, DE, 24 languages | best prosody, style-promptable ("read like a patient teacher"), for finals |
 
-Measured on the Ideapad (12-thread CPU, no GPU), one backend at a time, 2026-09-17. Full per-voice
+Measured on a laptop (12-thread CPU, no GPU), one backend at a time, 2026-09-17. Full per-voice
 numbers, clips and quality notes are on the audition page; the medians:
 
 | Backend | Runs | Clips | Median RTF | 10 min of narration |

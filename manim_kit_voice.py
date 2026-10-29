@@ -51,7 +51,7 @@ GEMINI_MODEL = "gemini-3.1-flash-tts-preview"
 # own directory, which usually has no .env.
 ENV_FILE_VAR = "MANIM_KIT_ENV_FILE"
 # The paid key comes first: the free tier allows 10 TTS requests per day, fewer
-# than one narrated scene needs (user, 2026-10-17).
+# than one narrated scene needs.
 GEMINI_KEY_NAMES = ("GEMINI_API_KEY_PAID", "GEMINI_API_KEY", "GOOGLE_API_KEY")
 
 FALLBACK_DEFAULT_SPEC = f"{PHONON_BACKEND}:Harper"
