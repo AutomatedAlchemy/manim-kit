@@ -199,9 +199,9 @@ when the Hub answers within 3 s, so a dead network gives an error instead of a h
 The Gemini backend needs an API key. The names are tried in the order
 `GEMINI_API_KEY_PAID`, `GEMINI_API_KEY`, `GOOGLE_API_KEY`, so a paid key wins over a
 free-tier one (the free tier allows 10 TTS requests a day). Each name is looked up in the
-environment first, then in the file named by `$MANIM_KIT_ENV_FILE`, and finally in
-`~/Synced/repos/tools/.env` if that exists — a convenience for this fleet, since the scene
-process runs from the scene's directory, which usually has no `.env` of its own.
+environment first, then in the file named by `$MANIM_KIT_ENV_FILE`. Set that variable when
+the key lives in a `.env`, since the scene process runs from the scene's directory, which
+usually has no `.env` of its own.
 
 ### Music under a voice
 

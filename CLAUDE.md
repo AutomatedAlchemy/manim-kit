@@ -111,9 +111,9 @@ grounds — `NARRATION-DESIGN.md` has the reasoning.
   the narration ends with the last spoken line, and without the pad `-shortest`
   cut a closing `self.wait()` off the video (fixed 2026-10-05). A render with no audio stream takes exactly the old command, so
   the "a good silent render never fails because of the music" guarantee stands.
-- **The Gemini key** is looked up in the environment, then `$MANIM_KIT_ENV_FILE`,
-  then `~/Synced/repos/tools/.env` — the scene process runs in the scene's
-  directory, which has no `.env`. Never printed.
+- **The Gemini key** is looked up in the environment, then in the file named by
+  `$MANIM_KIT_ENV_FILE` — the scene process runs in the scene's directory, which
+  has no `.env`. Never printed.
 - **sox**: manim-voiceover imports the `sox` Python package unconditionally and
   warns loudly on stderr because the binary is absent here. Only `global_speed
   != 1` and the microphone recorder actually call it, so `doctor` mentions it
