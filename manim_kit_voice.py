@@ -659,7 +659,7 @@ def backend_status() -> List[Dict[str, Any]]:
     if not have_genai:
         gemini_notes.append("google-genai not installed — run: manim-kit setup")
     if not have_key:
-        gemini_notes.append(f"no GEMINI_API_KEY (env or $MANIM_KIT_ENV_FILE)")
+        gemini_notes.append("no GEMINI_API_KEY (env or $MANIM_KIT_ENV_FILE)")
     rows.append({
         "backend": GEMINI_BACKEND,
         "usable": have_mv and have_genai and have_key,
