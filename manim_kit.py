@@ -171,16 +171,17 @@ default marked and says which backend works on this host.
 
 | Spec | Lang | |
 |---|---|---|
-| `phonon:Harper` | en | **the default** (`--voice en`) — American female, confident and friendly |
+| `gemini-flash-tts:Aoede:de` | de | **the default** (`--voice de`) — German female, soft — paid API |
+| `gemini-flash-tts:Aoede` | en | **English default** (`--voice en`) — the same voice in English — paid API |
+| `phonon:Harper` | en | offline fallback for English — American female, confident and friendly |
 | `phonon:Hadley` | en | American female, even and kind |
 | `phonon:Trevor` | en | American male, warm |
 | `phonon:Spencer` | en | British male, light and patient |
-| `phonon:Annika:de` | de | **German default** (`--voice de`) — German female, sparky |
+| `phonon:Annika:de` | de | offline fallback for German — German female, sparky |
 | `phonon:Anton:de` | de | German male |
 | `gemini-flash-tts:Puck` | en | male, best prosody — paid API |
 | `gemini-flash-tts:Leda` | en | calm female, good for a long explainer — paid API |
 | `gemini-flash-tts:Kore:de` | de | German female, firm and clear — paid API |
-| `gemini-flash-tts:Aoede:de` | de | German female, softer — paid API |
 | `gemini-flash-tts:Charon:de` | de | German male — paid API |
 
 `phonon` runs gradium's Phonon 40M multilingual model offline on the CPU, English and
@@ -192,6 +193,11 @@ still work and map to a Phonon voice (`af_heart` → Hadley), with a note.
 `gemini-flash-tts` calls the Gemini API and **costs money** — about $0.006 per
 two-sentence line, so a 10-minute explainer is a few cents. **For commercial work use a
 Gemini voice**, in English and in German.
+
+Aoede is the default since 2026-11-12 (user decision). On a host without a Gemini key
+a scene falls back to the Phonon voice of the same language and prints a note. A Gemini
+429 (10 requests per minute, shared by every session on the key) is retried after 10,
+20 and 40 s.
 
 Pick one with `--voice SPEC`; without it the scene uses `$MANIM_KIT_VOICE`, else the
 fleet-wide default in `voice.json`. Audition one without rendering:

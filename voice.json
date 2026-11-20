@@ -24,10 +24,18 @@
     "",
     "language_defaults maps a bare language code to a spec, so `--voice de` or",
     "MANIM_KIT_VOICE=de picks the German default. User decision 2026-10-26:",
-    "Harper for English, Annika for German, both Phonon."
+    "Harper for English, Annika for German, both Phonon.",
+    "",
+    "User decision 2026-11-12: Gemini's Aoede is the default for every narration, German",
+    "and English. A host without a Gemini key falls back to offline_fallback for the",
+    "same language (Phonon), with a note on stderr."
   ],
-  "default": "phonon:Harper",
+  "default": "gemini-flash-tts:Aoede:de",
   "language_defaults": {
+    "en": "gemini-flash-tts:Aoede",
+    "de": "gemini-flash-tts:Aoede:de"
+  },
+  "offline_fallback": {
     "en": "phonon:Harper",
     "de": "phonon:Annika:de"
   },
@@ -50,7 +58,7 @@
     {
       "spec": "phonon:Harper",
       "lang": "en",
-      "note": "Default. American female, adult, confident and friendly."
+      "note": "Offline fallback for English. American female, adult, confident and friendly."
     },
     {
       "spec": "phonon:Hadley",
@@ -70,7 +78,7 @@
     {
       "spec": "phonon:Annika:de",
       "lang": "de",
-      "note": "German default. German female, adult, sparky and attentive."
+      "note": "Offline fallback for German. German female, adult, sparky and attentive."
     },
     {
       "spec": "phonon:Anton:de",
@@ -95,7 +103,12 @@
     {
       "spec": "gemini-flash-tts:Aoede:de",
       "lang": "de",
-      "note": "German female voice, softer than Kore."
+      "note": "Default. German female voice, softer than Kore."
+    },
+    {
+      "spec": "gemini-flash-tts:Aoede",
+      "lang": "en",
+      "note": "English default. The same Aoede voice speaking English."
     },
     {
       "spec": "gemini-flash-tts:Charon:de",

@@ -272,8 +272,8 @@ def test_voice_default_prefers_the_environment(monkeypatch):
 
 
 def test_expand_spec_maps_a_language_code():
-    assert mk.expand_spec("de") == "phonon:Annika:de"
-    assert mk.expand_spec("en") == "phonon:Harper"
+    assert mk.expand_spec("de") == "gemini-flash-tts:Aoede:de"
+    assert mk.expand_spec("en") == "gemini-flash-tts:Aoede"
     assert mk.expand_spec("phonon:Trevor") == "phonon:Trevor"
 
 

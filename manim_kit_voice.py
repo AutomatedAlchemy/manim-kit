@@ -53,6 +53,9 @@ ENV_FILE_VAR = "MANIM_KIT_ENV_FILE"
 # The paid key comes first: the free tier allows 10 TTS requests per day, fewer
 # than one narrated scene needs.
 GEMINI_KEY_NAMES = ("GEMINI_API_KEY_PAID", "GEMINI_API_KEY", "GOOGLE_API_KEY")
+# Waits before each retry after a Gemini 429. Together they span more than the
+# one-minute window the limit counts in.
+GEMINI_RATE_LIMIT_WAITS_S = (10.0, 20.0, 40.0)
 
 FALLBACK_DEFAULT_SPEC = f"{PHONON_BACKEND}:Harper"
 
@@ -80,6 +83,17 @@ def manifest_default() -> str:
 def language_default(lang: str) -> Optional[str]:
     """The spec voice.json names for a bare language code such as ``de``."""
     return voice_manifest().get("language_defaults", {}).get(lang.strip().lower())
+
+
+def offline_fallback(spec: str) -> str:
+    """The free offline spec that stands in for Gemini *spec* on a host without a key.
+
+    voice.json's ``offline_fallback`` is keyed by language; a spec without one
+    speaks English.
+    """
+    _, _, lang = parse_spec(spec)
+    table = voice_manifest().get("offline_fallback", {})
+    return migrate_spec(str(table.get(lang or "en") or FALLBACK_DEFAULT_SPEC))
 
 
 def phonon_pins() -> Dict[str, Any]:
@@ -559,12 +573,38 @@ def _wrap_gemini(service: Any, style: Optional[str] = None) -> Any:
     prefix = (style.rstrip() + " ") if style else ""
 
     def generate_from_text(text: str, cache_dir: Any = None, path: Any = None, **kwargs: Any) -> Any:
-        data = dict(original(prefix + text, cache_dir=cache_dir, path=path, **kwargs))
+        data = dict(_retry_rate_limit(
+            lambda: original(prefix + text, cache_dir=cache_dir, path=path, **kwargs)))
         data["input_text"] = text
         return with_word_boundaries(data, text, cache_dir or service.cache_dir)
 
     service.generate_from_text = generate_from_text
     return service
+
+
+def _is_rate_limit(exc: BaseException) -> bool:
+    """Whether *exc* is Gemini's 429 (requests per minute used up)."""
+    text = str(exc)
+    return "RESOURCE_EXHAUSTED" in text or getattr(exc, "code", None) == 429 or text.startswith("429")
+
+
+def _retry_rate_limit(call: Any, waits: Tuple[float, ...] = GEMINI_RATE_LIMIT_WAITS_S,
+                      sleep: Any = None) -> Any:
+    """Run *call*; on a 429 wait and try again, once per entry in *waits*.
+
+    Gemini TTS allows 10 requests per minute per model, and parallel sessions
+    on one key share that budget, so a 429 means "wait", not "this line failed".
+    """
+    import time
+    sleep = sleep or time.sleep
+    for wait in (*waits, None):
+        try:
+            return call()
+        except Exception as exc:
+            if wait is None or not _is_rate_limit(exc):
+                raise
+            print(f"gemini: rate limit, retrying in {wait:.0f} s", file=sys.stderr)
+            sleep(wait)
 
 
 # --- factories ---------------------------------------------------------------------
@@ -592,8 +632,16 @@ def default_service(spec: Optional[str] = None, **kwargs: Any) -> Any:
 
     Spec order: the argument, then ``$MANIM_KIT_VOICE`` (which
     ``manim-kit render --voice`` sets), then the ``voice.json`` default.
+    A Gemini spec on a host without a Gemini key falls back to
+    :func:`offline_fallback`, so a scene still renders with a voice.
     """
-    return service_for(resolve_spec(spec), **kwargs)
+    chosen = resolve_spec(spec)
+    if parse_spec(chosen)[0] == GEMINI_BACKEND and not gemini_key():
+        fallback = offline_fallback(chosen)
+        print(f"note: no Gemini key on this host; {chosen} falls back to {fallback}",
+              file=sys.stderr)
+        chosen = fallback
+    return service_for(chosen, **kwargs)
 
 
 def subcaptions_wanted() -> bool:

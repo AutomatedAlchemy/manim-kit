@@ -49,10 +49,60 @@ def test_resolve_spec_order(monkeypatch):
 
 def test_bare_language_code_picks_the_language_default(monkeypatch):
     monkeypatch.delenv("MANIM_KIT_VOICE", raising=False)
-    assert v.resolve_spec("de") == "phonon:Annika:de"
-    assert v.resolve_spec("en") == "phonon:Harper"
+    assert v.resolve_spec("de") == "gemini-flash-tts:Aoede:de"
+    assert v.resolve_spec("en") == "gemini-flash-tts:Aoede"
     monkeypatch.setenv("MANIM_KIT_VOICE", "de")
-    assert v.resolve_spec() == "phonon:Annika:de"
+    assert v.resolve_spec() == "gemini-flash-tts:Aoede:de"
+
+
+def test_aoede_is_the_default_and_phonon_the_offline_fallback():
+    # User decision 2026-11-12: Aoede for every narration, Phonon without a key.
+    assert v.manifest_default() == "gemini-flash-tts:Aoede:de"
+    assert v.offline_fallback("gemini-flash-tts:Aoede:de") == "phonon:Annika:de"
+    assert v.offline_fallback("gemini-flash-tts:Aoede") == "phonon:Harper"
+
+
+def test_default_service_falls_back_offline_without_a_gemini_key(monkeypatch, capsys):
+    monkeypatch.delenv("MANIM_KIT_VOICE", raising=False)
+    monkeypatch.setattr(v, "gemini_key", lambda: None)
+    seen = []
+    monkeypatch.setattr(v, "service_for", lambda spec, **kw: seen.append(spec) or spec)
+    v.default_service()
+    assert seen == ["phonon:Annika:de"]
+    assert "falls back to phonon:Annika:de" in capsys.readouterr().err
+
+
+def test_default_service_keeps_gemini_when_a_key_exists(monkeypatch):
+    monkeypatch.delenv("MANIM_KIT_VOICE", raising=False)
+    monkeypatch.setattr(v, "gemini_key", lambda: "k")
+    monkeypatch.setattr(v, "service_for", lambda spec, **kw: spec)
+    assert v.default_service() == "gemini-flash-tts:Aoede:de"
+
+
+def test_rate_limit_is_retried_then_raised():
+    waits = []
+    calls = []
+
+    def flaky():
+        calls.append(1)
+        if len(calls) < 3:
+            raise RuntimeError("429 RESOURCE_EXHAUSTED. quota exceeded")
+        return "ok"
+
+    assert v._retry_rate_limit(flaky, waits=(1.0, 2.0, 3.0), sleep=waits.append) == "ok"
+    assert waits == [1.0, 2.0]
+
+    def always():
+        raise RuntimeError("429 RESOURCE_EXHAUSTED")
+
+    with pytest.raises(RuntimeError):
+        v._retry_rate_limit(always, waits=(1.0,), sleep=lambda s: None)
+
+    def other():
+        raise ValueError("bad request")
+
+    with pytest.raises(ValueError):                    # only a 429 is retried
+        v._retry_rate_limit(other, waits=(1.0,), sleep=lambda s: pytest.fail("slept"))
 
 
 def test_language_defaults_are_curated():

@@ -84,8 +84,10 @@ grounds — `NARRATION-DESIGN.md` has the reasoning.
 
 - **Spec strings** are `backend:voice[:lang]`. Order: `--voice`, then
   `$MANIM_KIT_VOICE`, then `voice.json`'s `default`. A bare language code
-  (`de`) expands through `language_defaults` (English: `phonon:Harper`,
-  German: `phonon:Annika:de`). `render` exports the spec as
+  (`de`) expands through `language_defaults` (English: `gemini-flash-tts:Aoede`,
+  German: `gemini-flash-tts:Aoede:de`, user decision 2026-11-12).
+  `default_service` swaps a Gemini spec for `offline_fallback` (Phonon) when
+  the host has no Gemini key; `_retry_rate_limit` waits out a 429. `render` exports the spec as
   `MANIM_KIT_VOICE` and puts `SCRIPT_DIR` on the subprocess `PYTHONPATH`, so
   `from manim_kit_voice import default_service` resolves from any scene
   directory.

@@ -68,11 +68,15 @@ def _duration(path):
     return float(_ffprobe(path, "-show_entries", "format=duration")[0])
 
 
+# The render test speaks with the free offline backend, never the paid default.
+TEST_VOICE = "phonon:Harper"
+
+
 def _voice_ready():
-    """The venv reports the default backend (Phonon) usable: ptts and a model cached."""
+    """The venv reports Phonon usable: ptts and a model cached."""
     if mk._manim_version() is None:
         return False
-    backend = mk.expand_spec(mk.voice_default()).split(":")[0]
+    backend = TEST_VOICE.split(":")[0]
     return any(r["backend"] == backend and r["usable"] == "usable" for r in mk._voice_check())
 
 
@@ -89,7 +93,8 @@ def test_narrated_render_carries_voice_and_ducked_music(tmp_path):
 
     # Silent first: manim itself mixes the voice clips in, so even --no-music
     # leaves an audio stream. That file is the voice-only reference.
-    out = subprocess.run([sys.executable, SCRIPT, "render", scene, "-q", "l", "--no-music"],
+    out = subprocess.run([sys.executable, SCRIPT, "render", scene, "-q", "l", "--no-music",
+                          "--voice", TEST_VOICE],
                          capture_output=True, text=True, timeout=1800)
     assert out.returncode == 0, out.stderr[-3000:]
     assert _codec_types(mp4) == ["video", "audio"]      # the narration is in there
@@ -102,7 +107,8 @@ def test_narrated_render_carries_voice_and_ducked_music(tmp_path):
     env = {**os.environ, "HOME": str(tmp_path)}         # keep the real ~/.cache out of it
     subprocess.run([sys.executable, SCRIPT, "music", "add", str(tone), "--id", "tone"],
                    check=True, env=env)
-    out = subprocess.run([sys.executable, SCRIPT, "render", scene, "-q", "l", "--track", "tone"],
+    out = subprocess.run([sys.executable, SCRIPT, "render", scene, "-q", "l", "--track", "tone",
+                          "--voice", TEST_VOICE],
                          capture_output=True, text=True, timeout=1800, env=env)
     assert out.returncode == 0, out.stderr[-3000:]
 

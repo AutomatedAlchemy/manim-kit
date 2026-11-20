@@ -145,16 +145,17 @@ A voice spec is `backend:voice[:lang]`. Two backends ship in this version:
 
 | Spec | Lang | Notes |
 |---|---|---|
-| `phonon:Harper` | en | **default** (`--voice en`) — American female, confident and friendly |
+| `gemini-flash-tts:Aoede:de` | de | **default** (`--voice de`) — German female, soft, paid |
+| `gemini-flash-tts:Aoede` | en | **English default** (`--voice en`) — the same voice in English, paid |
+| `phonon:Harper` | en | offline fallback for English — American female, confident and friendly |
 | `phonon:Hadley` | en | American female, even and kind |
 | `phonon:Trevor` | en | American male, warm |
 | `phonon:Spencer` | en | British male, light and patient |
-| `phonon:Annika:de` | de | **German default** (`--voice de`) — German female, sparky |
+| `phonon:Annika:de` | de | offline fallback for German — German female, sparky |
 | `phonon:Anton:de` | de | German male |
 | `gemini-flash-tts:Puck` | en | best prosody, paid |
 | `gemini-flash-tts:Leda` | en | calm, paid |
 | `gemini-flash-tts:Kore:de` | de | German female, firm and clear, paid |
-| `gemini-flash-tts:Aoede:de` | de | German female, softer, paid |
 | `gemini-flash-tts:Charon:de` | de | German male, paid |
 
 `phonon` runs gradium's [Phonon 40M multilingual](https://huggingface.co/gradium/phonon-40m-multilingual)
@@ -183,8 +184,10 @@ the licence reasoning.
 
 Selection order: `--voice SPEC`, then `$MANIM_KIT_VOICE`, then the `default` in
 `voice.json`. A bare language code in either place (`--voice de`) picks that language's
-entry in `language_defaults`: English is `phonon:Harper`, German is
-`phonon:Annika:de`. That file is committed
+entry in `language_defaults`: English is `gemini-flash-tts:Aoede`, German is
+`gemini-flash-tts:Aoede:de`. A host without a Gemini key falls back to the
+`offline_fallback` entry for the same language (`phonon:Harper`, `phonon:Annika:de`)
+and prints a note; a Gemini 429 is retried after 10, 20 and 40 s. That file is committed
 and the repo is synced, so the default is fleet-wide; it also carries the curated voice
 list and the Phonon pins: the two models and the voice catalog at fixed Hub revisions,
 the quantization, the voice names and the Kokoro-name map.
