@@ -27,8 +27,9 @@
     "Harper for English, Annika for German, both Phonon.",
     "",
     "User decision 2026-11-12: Gemini's Aoede is the default for every narration, German",
-    "and English. A host without a Gemini key falls back to offline_fallback for the",
-    "same language (Phonon), with a note on stderr."
+    "and English. On a host without a Gemini key the default and a bare language code",
+    "fall back to offline_fallback for the same language (Phonon), with a note. A Gemini",
+    "voice named in full does not fall back."
   ],
   "default": "gemini-flash-tts:Aoede:de",
   "language_defaults": {

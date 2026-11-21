@@ -363,6 +363,90 @@ def test_render_dry_run_no_ducking(tmp_path, monkeypatch, capsys):
     assert "amix=inputs=2" in out
 
 
+def _keyless(monkeypatch):
+    import manim_kit_voice
+    monkeypatch.setattr(manim_kit_voice, "gemini_key", lambda: None)
+
+
+def test_keyless_fallback_is_for_the_default_chain_only(monkeypatch):
+    _keyless(monkeypatch)
+    assert mk.keyless_fallback("", "gemini-flash-tts:Aoede:de") == "phonon:Annika:de"
+    assert mk.keyless_fallback("en", "gemini-flash-tts:Aoede") == "phonon:Harper"
+    assert mk.keyless_fallback("gemini-flash-tts:Puck", "gemini-flash-tts:Puck") is None
+    assert mk.keyless_fallback("", "phonon:Harper") is None
+    import manim_kit_voice
+    monkeypatch.setattr(manim_kit_voice, "gemini_key", lambda: "k")
+    assert mk.keyless_fallback("", "gemini-flash-tts:Aoede:de") is None
+
+
+def test_render_dry_run_exports_the_fallback_for_a_language_code(tmp_path, monkeypatch, capsys):
+    f = tmp_path / "one.py"
+    f.write_text("from manim import *\nclass Only(VoiceoverScene): pass\n")
+    monkeypatch.setattr(mk, "_manim_version", lambda: "0.0-test")
+    monkeypatch.delenv("MANIM_KIT_VOICE", raising=False)
+    _keyless(monkeypatch)
+    assert mk.main(["render", str(f), "--dry-run", "--no-music", "--voice", "en"]) == 0
+    assert "MANIM_KIT_VOICE=phonon:Harper" in capsys.readouterr().out
+    # A Gemini voice named in full is exported as it is; the venv raises without a key.
+    assert mk.main(["render", str(f), "--dry-run", "--no-music",
+                    "--voice", "gemini-flash-tts:Puck"]) == 0
+    assert "MANIM_KIT_VOICE=gemini-flash-tts:Puck" in capsys.readouterr().out
+
+
+def _fake_narrated_render(tmp_path, monkeypatch):
+    f = tmp_path / "one.py"
+    f.write_text("from manim import *\nclass Only(VoiceoverScene): pass\n")
+    monkeypatch.setattr(mk, "_manim_version", lambda: "0.0-test")
+    monkeypatch.setattr(mk.subprocess, "run",
+                        lambda *a, **k: subprocess.CompletedProcess(a, 0))
+    monkeypatch.setattr(mk, "_media_outputs", lambda *a, **k: [str(tmp_path / "Only.mp4")])
+    monkeypatch.setattr(mk, "has_audio_stream", lambda p: True)
+    monkeypatch.delenv("MANIM_KIT_VOICE", raising=False)
+    return str(f)
+
+
+def test_render_summary_credits_phonon_when_the_default_fell_back(tmp_path, monkeypatch, capsys):
+    scene = _fake_narrated_render(tmp_path, monkeypatch)
+    _keyless(monkeypatch)
+    assert mk.main(["render", scene, "--no-music"]) == 0
+    out = capsys.readouterr().out
+    assert "Voice: phonon:Annika:de" in out
+    assert "Phonon by Gradium, CC BY-NC 4.0" in out
+    assert "Gemini TTS, paid" not in out
+
+
+def test_render_summary_names_gemini_when_a_key_exists(tmp_path, monkeypatch, capsys):
+    scene = _fake_narrated_render(tmp_path, monkeypatch)
+    import manim_kit_voice
+    monkeypatch.setattr(manim_kit_voice, "gemini_key", lambda: "k")
+    assert mk.main(["render", scene, "--no-music"]) == 0
+    out = capsys.readouterr().out
+    assert "Voice: gemini-flash-tts:Aoede:de (Gemini TTS, paid" in out
+    assert "CC BY-NC" not in out
+
+
+def test_voice_say_passes_the_fallback_for_the_default(tmp_path, monkeypatch, capsys):
+    calls = []
+    monkeypatch.setattr(mk, "_require_manim", lambda: None)
+    monkeypatch.setattr(mk.subprocess, "run",
+                        lambda cmd, **k: calls.append(cmd) or subprocess.CompletedProcess(cmd, 0, "", ""))
+    monkeypatch.delenv("MANIM_KIT_VOICE", raising=False)
+    _keyless(monkeypatch)
+    assert mk.main(["voice", "say", "hi", "--out", str(tmp_path / "a.mp3")]) == 0
+    assert calls[-1][calls[-1].index("--voice") + 1] == "phonon:Annika:de"
+    assert mk.main(["voice", "say", "hi", "--voice", "gemini-flash-tts:Puck",
+                    "--out", str(tmp_path / "b.mp3")]) == 0
+    assert calls[-1][calls[-1].index("--voice") + 1] == "gemini-flash-tts:Puck"
+
+
+def test_voice_list_names_the_fallback_without_a_key(monkeypatch, capsys):
+    monkeypatch.setattr(mk, "_voice_check", lambda: [])
+    monkeypatch.delenv("MANIM_KIT_VOICE", raising=False)
+    _keyless(monkeypatch)
+    assert mk.main(["voice", "list"]) == 0
+    assert "the default speaks as phonon:Annika:de" in capsys.readouterr().out
+
+
 def test_render_rejects_an_unknown_voice_spec(tmp_path, monkeypatch):
     f = tmp_path / "one.py"
     f.write_text("from manim import *\nclass Only(Scene): pass\n")

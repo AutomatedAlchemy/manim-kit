@@ -72,6 +72,42 @@ def test_default_service_falls_back_offline_without_a_gemini_key(monkeypatch, ca
     assert "falls back to phonon:Annika:de" in capsys.readouterr().err
 
 
+def test_a_language_code_falls_back_offline_without_a_gemini_key(monkeypatch):
+    monkeypatch.setattr(v, "gemini_key", lambda: None)
+    monkeypatch.setenv("MANIM_KIT_VOICE", "en")
+    assert v.effective_spec() == ("phonon:Harper", "gemini-flash-tts:Aoede")
+    monkeypatch.delenv("MANIM_KIT_VOICE")
+    assert v.effective_spec("de") == ("phonon:Annika:de", "gemini-flash-tts:Aoede:de")
+
+
+def test_a_gemini_voice_named_in_full_is_not_swapped_without_a_key(monkeypatch, capsys):
+    # Phonon output is non-commercial only, so it never stands in for a chosen voice.
+    monkeypatch.setattr(v, "gemini_key", lambda: None)
+    monkeypatch.setattr(v, "service_for", lambda spec, **kw: spec)
+    monkeypatch.delenv("MANIM_KIT_VOICE", raising=False)
+    assert v.default_service("gemini-flash-tts:Puck") == "gemini-flash-tts:Puck"
+    monkeypatch.setenv("MANIM_KIT_VOICE", "gemini-flash-tts:Kore:de")
+    assert v.default_service() == "gemini-flash-tts:Kore:de"
+    assert capsys.readouterr().err == ""
+
+
+def test_say_falls_back_for_the_default_only(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(v, "gemini_key", lambda: None)
+    monkeypatch.delenv("MANIM_KIT_VOICE", raising=False)
+    seen = []
+
+    def stop(spec, **kw):
+        seen.append(spec)
+        raise RuntimeError("stop before synthesis")
+
+    monkeypatch.setattr(v, "service_for", stop)
+    for argv in (["hi"], ["hi", "--voice", "gemini-flash-tts:Puck"]):
+        with pytest.raises(RuntimeError, match="stop before synthesis"):
+            v._cmd_say(argv + ["--out", str(tmp_path / "x.wav")])
+    assert seen == ["phonon:Annika:de", "gemini-flash-tts:Puck"]
+    assert capsys.readouterr().err.count("falls back to phonon:Annika:de") == 1
+
+
 def test_default_service_keeps_gemini_when_a_key_exists(monkeypatch):
     monkeypatch.delenv("MANIM_KIT_VOICE", raising=False)
     monkeypatch.setattr(v, "gemini_key", lambda: "k")

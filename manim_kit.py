@@ -195,7 +195,9 @@ two-sentence line, so a 10-minute explainer is a few cents. **For commercial wor
 Gemini voice**, in English and in German.
 
 Aoede is the default since 2026-11-12 (user decision). On a host without a Gemini key
-a scene falls back to the Phonon voice of the same language and prints a note. A Gemini
+the default and a language code (`--voice de`) fall back to the Phonon voice of the same
+language with a note, and the render summary prints the Phonon credit. A Gemini voice
+named in full does not fall back and fails without a key. A Gemini
 429 (10 requests per minute, shared by every session on the key) is retried after 10,
 20 and 40 s.
 
@@ -846,6 +848,22 @@ def expand_spec(spec: str) -> str:
     return spec
 
 
+def keyless_fallback(requested: str, spec: str) -> Optional[str]:
+    """The offline spec that speaks in place of Gemini *spec* on a host without a key.
+
+    *requested* is what the user named (``--voice`` or ``$MANIM_KIT_VOICE``)
+    before expansion. Only the default chain falls back: nothing named, or a
+    bare language code. A Gemini voice named in full stays and fails in the
+    venv without a key. The rule and the key lookup are manim_kit_voice's,
+    which imports with the standard library alone.
+    """
+    import manim_kit_voice
+
+    if not _valid_spec(spec) or not manim_kit_voice.from_default_chain(requested):
+        return None
+    return manim_kit_voice.keyless_fallback(spec)
+
+
 def curated_voices() -> List[Dict[str, str]]:
     return list(voice_manifest().get("voices", []))  # type: ignore[arg-type]
 
@@ -1075,9 +1093,21 @@ def cmd_render(args: argparse.Namespace) -> int:
     env = dict(os.environ)
     existing = env.get("PYTHONPATH")
     env["PYTHONPATH"] = SCRIPT_DIR + (os.pathsep + existing if existing else "")
-    voice_spec = expand_spec(args.voice or env.get("MANIM_KIT_VOICE") or "")
+    requested = args.voice or env.get("MANIM_KIT_VOICE") or ""
+    voice_spec = expand_spec(requested)
     if args.voice and not _valid_spec(voice_spec):
         _fail(f"unknown voice spec {args.voice!r}; see: manim-kit voice list")
+    # The voice the summary below names. Without a Gemini key the default chain
+    # speaks with the offline fallback. A language code is replaced here, because
+    # the scene process only sees the expanded spec; with no voice named the
+    # scene process applies the same rule and prints the note itself.
+    spoken = voice_spec or expand_spec(voice_default())
+    fallback = keyless_fallback(requested, spoken)
+    if fallback:
+        if voice_spec:
+            _info(f"no Gemini key on this host; {voice_spec} falls back to {fallback}")
+            voice_spec = fallback
+        spoken = fallback
     if voice_spec:
         # Exported expanded, so the scene process neither re-expands a language
         # code nor prints the Kokoro note a second time.
@@ -1125,7 +1155,6 @@ def cmd_render(args: argparse.Namespace) -> int:
     if mixed and credit:
         print("Music credit — put this in the video description:")
         print(f"  {credit}")
-    spoken = voice_spec or expand_spec(voice_default())
     if narrated and spoken.startswith("gemini"):
         print(f"Voice: {spoken} (Gemini TTS, paid — about $0.006 per narration line; "
               "unchanged lines are served from media/voiceovers/ and cost nothing)")
@@ -1222,6 +1251,10 @@ def cmd_voice(args: argparse.Namespace) -> int:
                  f"  (from {os.path.basename(VOICE_JSON)})"))
         for lang, spec in lang_defaults.items():  # type: ignore[union-attr]
             print(f"Default for {lang} (+): {spec}  (--voice {lang})")
+        fallback = keyless_fallback(os.environ.get("MANIM_KIT_VOICE") or "", default)
+        if fallback:
+            print(f"No Gemini key on this host: the default speaks as {fallback}, "
+                  "and so does a language code with a Gemini default.")
         print("Override per render with: manim-kit render FILE.py --voice SPEC")
         return 0
 
@@ -1242,9 +1275,14 @@ def cmd_voice(args: argparse.Namespace) -> int:
         if not args.text:
             _fail("voice say needs some text")
         _require_manim()
-        spec = expand_spec(args.voice or voice_default())
+        requested = args.voice or os.environ.get("MANIM_KIT_VOICE") or ""
+        spec = expand_spec(requested or voice_default())
         if not _valid_spec(spec):
             _fail(f"unknown voice spec {spec!r}; see: manim-kit voice list")
+        fallback = keyless_fallback(requested, spec)
+        if fallback:
+            _info(f"no Gemini key on this host; {spec} falls back to {fallback}")
+            spec = fallback
         backend, voice = spec.split(":")[0], spec.split(":")[1]
         out = args.out or os.path.join(os.getcwd(), f"voice-{backend}-{voice}.mp3")
         cmd = [VENV_PYTHON, VOICE_MODULE, "say", " ".join(args.text),

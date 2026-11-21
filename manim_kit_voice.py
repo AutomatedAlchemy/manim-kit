@@ -627,20 +627,57 @@ def service_for(spec: str, style: Optional[str] = None, speed: float = 1.0,
     return _gemini_service(voice, style=style, **kwargs)
 
 
+def from_default_chain(given: Optional[str]) -> bool:
+    """Whether *given* leaves the choice of voice to voice.json.
+
+    *given* is what the user named, in ``--voice`` or ``$MANIM_KIT_VOICE``,
+    before a language code is expanded. Nothing, or a bare language code such
+    as ``de``, is the default chain. A full ``backend:voice`` spec is a choice.
+    """
+    return not given or language_default(given) is not None
+
+
+def keyless_fallback(spec: str) -> Optional[str]:
+    """The offline spec for Gemini *spec* on a host without a Gemini key, else None."""
+    if parse_spec(spec)[0] == GEMINI_BACKEND and not gemini_key():
+        return offline_fallback(spec)
+    return None
+
+
+def effective_spec(spec: Optional[str] = None) -> Tuple[str, Optional[str]]:
+    """The spec that will speak, and the Gemini spec it replaces (or None).
+
+    Only a spec from the default chain (:func:`from_default_chain`) falls back
+    to :func:`offline_fallback` without a Gemini key. A Gemini voice named in
+    full stays, and ``service_for`` raises without a key: Phonon output is
+    non-commercial only, so it must not stand in for a voice someone chose.
+    """
+    given = spec or os.environ.get("MANIM_KIT_VOICE")
+    chosen = resolve_spec(spec)
+    if from_default_chain(given):
+        fallback = keyless_fallback(chosen)
+        if fallback:
+            return fallback, chosen
+    return chosen, None
+
+
+def _note_fallback(replaced: str, chosen: str) -> None:
+    print(f"note: no Gemini key on this host; {replaced} falls back to {chosen} "
+          f"(non-commercial only, credit: {PHONON_CREDIT})", file=sys.stderr)
+
+
 def default_service(spec: Optional[str] = None, **kwargs: Any) -> Any:
     """The service a narrated scene should use.
 
     Spec order: the argument, then ``$MANIM_KIT_VOICE`` (which
     ``manim-kit render --voice`` sets), then the ``voice.json`` default.
-    A Gemini spec on a host without a Gemini key falls back to
-    :func:`offline_fallback`, so a scene still renders with a voice.
+    The default, or a bare language code, falls back to
+    :func:`offline_fallback` on a host without a Gemini key, so a scene still
+    renders with a voice. A Gemini spec named in full needs the key.
     """
-    chosen = resolve_spec(spec)
-    if parse_spec(chosen)[0] == GEMINI_BACKEND and not gemini_key():
-        fallback = offline_fallback(chosen)
-        print(f"note: no Gemini key on this host; {chosen} falls back to {fallback}",
-              file=sys.stderr)
-        chosen = fallback
+    chosen, replaced = effective_spec(spec)
+    if replaced:
+        _note_fallback(replaced, chosen)
     return service_for(chosen, **kwargs)
 
 
@@ -749,7 +786,9 @@ def _cmd_say(argv: List[str]) -> int:
                    help="Phonon tempo factor 0.5..2.0, applied with ffmpeg (default: 1.0)")
     args = p.parse_args(argv)
 
-    spec = resolve_spec(args.voice)
+    spec, replaced = effective_spec(args.voice)
+    if replaced:
+        _note_fallback(replaced, spec)
     backend, voice, _ = parse_spec(spec)
     out = args.out or f"voice-{backend}-{voice}.mp3"
 

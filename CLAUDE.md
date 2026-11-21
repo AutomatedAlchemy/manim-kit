@@ -86,8 +86,13 @@ grounds — `NARRATION-DESIGN.md` has the reasoning.
   `$MANIM_KIT_VOICE`, then `voice.json`'s `default`. A bare language code
   (`de`) expands through `language_defaults` (English: `gemini-flash-tts:Aoede`,
   German: `gemini-flash-tts:Aoede:de`, user decision 2026-11-12).
-  `default_service` swaps a Gemini spec for `offline_fallback` (Phonon) when
-  the host has no Gemini key; `_retry_rate_limit` waits out a 429. `render` exports the spec as
+  Without a Gemini key, a Gemini spec from the default chain (nothing named, or
+  a bare language code) becomes `offline_fallback` (Phonon); a Gemini spec named
+  in full stays and raises. The rule is `effective_spec` in `manim_kit_voice.py`,
+  used by `default_service` and `say`; `render`, `voice say` and `voice list` in
+  `manim_kit.py` call the same rule through `keyless_fallback`, because they
+  expand a language code before the scene process sees it. `_retry_rate_limit`
+  waits out a 429. `render` exports the spec as
   `MANIM_KIT_VOICE` and puts `SCRIPT_DIR` on the subprocess `PYTHONPATH`, so
   `from manim_kit_voice import default_service` resolves from any scene
   directory.
